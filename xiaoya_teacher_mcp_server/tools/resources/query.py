@@ -125,13 +125,13 @@ def query_course_resources(
 @MCP.tool()
 def download_file(
     quote_id: Annotated[str, Field(description="文件quote_id")],
-    filename: Annotated[str, Field(description="文件名")],
+    filename: Annotated[str, Field(description="资源文件名")],
     save_path: Annotated[
         Optional[str],
         Field(description="文件保存路径[默认临时文件夹]", default=None),
     ] = None,
 ) -> dict:
-    """获取下载链接并自动下载文件内容"""
+    """获取下载链接并自动下载文件内容,保存到本地磁盘"""
     try:
         url = f"{DOWNLOAD_URL}/cloud/file_down/{quote_id}/v2?filename={quote(filename)}"
         response = requests.get(url, headers=create_headers()).json()
@@ -166,13 +166,17 @@ def download_file(
 
 @MCP.tool()
 def read_file_by_markdown(
-    quote_id: Annotated[Optional[str], Field(description="文件quote_id", default=None)],
-    filename: Annotated[Optional[str], Field(description="文件名", default=None)],
+    quote_id: Annotated[
+        Optional[str], Field(description="文件quote_id", default=None)
+    ] = None,
+    filename: Annotated[
+        Optional[str], Field(description="资源文件名", default=None)
+    ] = None,
     file_path: Annotated[
-        Optional[str], Field(description="本地文件路径", default=None)
-    ],
+        Optional[str], Field(description="本地磁盘文件路径", default=None)
+    ] = None,
 ) -> dict:
-    """使用markitdown工具,通过文件id和文件名下载文件并转换为markdown格式,或直接转换本地文件,读取文本内容"""
+    """使用markitdown工具读取本地文件路径(提供file_path)或小雅资源(需同时提供quote_id和filename)的文件内容并转换为markdown格式"""
     try:
         if file_path:
             result = MarkItDown().convert(Path(file_path))
