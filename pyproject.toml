@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xiaoya-teacher-mcp-server"
-version = "1.0.5"
+version = "1.0.6"
 description = "小雅教育管理MCP服务器 - 专为教师设计,提供课程资源管理和试题创建工具"
 authors = [{ name = "Sav1ouR520", email = "3300233150@qq.com" }]
 license = { text = "MIT" }

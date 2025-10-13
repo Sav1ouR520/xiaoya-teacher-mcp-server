@@ -133,7 +133,7 @@ def create_fill_blank_question(
         )[0]
 
         _validate_fill_blank_question(question.title, len(question.options))
-        count = question.title.count("____")
+        count = sum(line.text.count("____") for line in question.title)
 
         result = create_blank_answer_items(paper_id, question_id, count)
         if not result["success"]:
@@ -284,7 +284,8 @@ def batch_create_questions(
                 result = create_fill_blank_question(paper_id, question)
             if result["success"]:
                 success_count += 1
-                results.append(f"第{i}题: 创建成功 - {question.title}")
+                title_text = "".join(line.text for line in question.title)
+                results.append(f"第{i}题: 创建成功 - {title_text}")
             else:
                 failed_count += 1
                 results.append(f"第{i}题: 创建失败 - {result['message']}")
@@ -433,12 +434,12 @@ def _update_question_base(
         raise ValueError(result.get("msg") or result.get("message", "未知错误"))
 
 
-def _validate_fill_blank_question(title: str, answers_count: int) -> None:
+def _validate_fill_blank_question(title: List[LineText], answers_count: int) -> None:
     """验证填空题的格式是否正确"""
-    if "____" not in title:
+    if not any("____" in line.text for line in title):
         raise ValueError("填空题标题必须包含空白标记'____'")
 
-    blank_count = title.count("____")
+    blank_count = sum(line.text.count("____") for line in title)
     if blank_count != answers_count:
         raise ValueError(
             f"空白标记数量({blank_count})与答案数量({answers_count})不匹配"
