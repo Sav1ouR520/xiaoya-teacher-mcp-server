@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 
-class LineTitle(BaseModel):
+class LineText(BaseModel):
     class InlineStyleRange(BaseModel):
         """内联样式范围"""
 
@@ -15,7 +15,7 @@ class LineTitle(BaseModel):
             description="样式类型"
         )
 
-    """编程题目描述的单行内容"""
+    """编程题目描述/选项的单行内容(非必要,选项单行即可,即传递{text:'内容', line_type'unstyled'})"""
     text: str = Field(description="行内容")
     line_type: Literal[
         "unordered-list-item", "ordered-list-item", "unstyled", "code-block"
@@ -113,7 +113,7 @@ class AttendanceUser(BaseModel):
 class QuestionOption(BaseModel):
     """题目选项(单选题/多选题使用)"""
 
-    text: str = Field(description="选项文本内容")
+    text: List[LineText] = Field(description="选项文本内容")
     answer: bool = Field(description="是否为正确答案")
 
 
@@ -347,15 +347,8 @@ class QuestionData(BaseModel):
     type: QuestionType = Field(
         description="题目类型(1=单选题, 2=多选题, 4=填空题, 5=判断题)", ge=1, le=10
     )
-    title: List[LineTitle] = Field(
-        description="题目描述(支持富文本，多行)(必须包含'____'作为空白标记,后续会自动根据'____'的多少创建填空框,选项数量必须与空白标记数量一致):\n"
-        "- 多行:列表形式\n"
-        "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
-        "- 题目描述格式例下(一行版本,可以多行,必须时换行):\n"
-        "  {\n"
-        "    'text': '题目内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
-        "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
-        "  }\n",
+    title: List[LineText] = Field(
+        description="题目描述(填空题必须包含'____'作为空白标记,后续会自动根据'____'的多少创建填空框,选项数量必须与空白标记数量一致):\n",
         min_length=1,
     )
     standard_answers: List[StandardAnswer] = Field(
@@ -394,7 +387,7 @@ class ChoiceQuestion(BaseModel):
     """单选题/多选题"""
 
     type: QuestionType = Field(description="题目类型 1=单选题, 2=多选题")
-    title: List[LineTitle] = Field(
+    title: List[LineText] = Field(
         description="题目描述(支持富文本，多行):\n"
         "- 多行:列表形式\n"
         "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
@@ -422,7 +415,7 @@ class ChoiceQuestion(BaseModel):
 class TrueFalseQuestion(BaseModel):
     """判断题"""
 
-    title: List[LineTitle] = Field(
+    title: List[LineText] = Field(
         description="题目描述(支持富文本，多行):\n"
         "- 多行:列表形式\n"
         "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
@@ -450,7 +443,7 @@ class TrueFalseQuestion(BaseModel):
 class FillBlankQuestion(BaseModel):
     """填空题"""
 
-    title: List[LineTitle] = Field(
+    title: List[LineText] = Field(
         description="题目描述(支持富文本，多行)(必须包含'____'作为空白标记,后续会自动根据'____'的多少创建填空框,选项数量必须与空白标记数量一致):\n"
         "- 多行:列表形式\n"
         "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
@@ -539,7 +532,7 @@ class ProgramConfig(BaseModel):
 class CodeQuestion(BaseModel):
     """编程题"""
 
-    title: List[LineTitle] = Field(
+    title: List[LineText] = Field(
         description="题目描述(支持富文本，多行):\n"
         "- 多行:列表形式\n"
         "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"

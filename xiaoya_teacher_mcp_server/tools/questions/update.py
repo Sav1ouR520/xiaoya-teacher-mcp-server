@@ -16,7 +16,7 @@ from ...config import MAIN_URL, create_headers, MCP
 from ...types.types import (
     AnswerChecked,
     AutoScoreType,
-    LineTitle,
+    LineText,
     ProgramConfig,
     QuestionScoreType,
     RequiredType,
@@ -29,7 +29,7 @@ from ...types.types import (
 def update_question(
     question_id: Annotated[str, Field(description="题目id")],
     title: Annotated[
-        Optional[list[LineTitle]],
+        Optional[list[LineText]],
         Field(
             description="题目描述(支持富文本，多行):\n"
             "- 多行:列表形式\n"
@@ -117,7 +117,7 @@ def update_question(
 @MCP.tool()
 def update_question_options(
     question_id: Annotated[str, Field(description="题目id")],
-    answer_item_id: Annotated[list[LineTitle], Field(description="选项id")],
+    answer_item_id: Annotated[list[LineText], Field(description="选项id")],
     option_text: Annotated[Optional[str], Field(description="选项文本内容")] = None,
     is_answer: Annotated[Optional[bool], Field(description="是否为正确答案")] = False,
 ) -> dict:
@@ -405,7 +405,7 @@ def _update_code_cases(
         return ResponseUtil.error("编程题测试用例更新失败", e)
 
 
-def word_text(lines: list[LineTitle]) -> dict:
+def word_text(lines: list[LineText]) -> dict:
     return json.dumps(
         {
             "blocks": [

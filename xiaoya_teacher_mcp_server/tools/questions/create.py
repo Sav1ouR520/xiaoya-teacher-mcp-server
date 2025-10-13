@@ -20,7 +20,7 @@ from ..questions.delete import delete_questions
 from ...types.types import (
     ChoiceQuestion,
     CodeQuestion,
-    LineTitle,
+    LineText,
     QuestionType,
     QuestionData,
     TrueFalseQuestion,
@@ -422,7 +422,7 @@ def _create_question_base(
 
 
 def _update_question_base(
-    question_id: str, title: List[LineTitle], description: str, paper_id: str, **kwargs
+    question_id: str, title: List[LineText], description: str, paper_id: str, **kwargs
 ) -> None:
     """更新题目基础信息, 失败时清理题目"""
     result = update_question(
