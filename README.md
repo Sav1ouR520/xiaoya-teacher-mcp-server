@@ -238,7 +238,7 @@ xiaoya_teacher_mcp_server/
 #### 核心API
 - `create_programming_question()` - 创建编程题
 - `update_programming_test_cases()` - 更新编程题测试用例
-- `update_question()` - 更新编程题配置(通过program_config参数)
+- `update_question()` - 更新编程题配置(通过program_setting参数)
 
 ### 资源管理 API
 #### 资源操作

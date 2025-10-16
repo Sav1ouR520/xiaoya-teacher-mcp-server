@@ -39,7 +39,7 @@ def create_single_choice_question(
     """创建单选题"""
     question_id = None
     try:
-        question_id, answer_items = _create_question_base(
+        question_id, answer_items, _ = _create_question_base(
             QuestionType.SINGLE_CHOICE,
             paper_id,
             question.score,
@@ -82,7 +82,7 @@ def create_multiple_choice_question(
     """创建多选题"""
     question_id = None
     try:
-        question_id, answer_items = _create_question_base(
+        question_id, answer_items, _ = _create_question_base(
             QuestionType.MULTIPLE_CHOICE,
             paper_id,
             question.score,
@@ -171,7 +171,7 @@ def create_true_false_question(
     """创建判断题"""
     question_id = None
     try:
-        question_id, answer_items = _create_question_base(
+        question_id, answer_items, _ = _create_question_base(
             QuestionType.TRUE_FALSE,
             paper_id,
             question.score,
@@ -219,12 +219,16 @@ def create_code_question(
     """创建编程题"""
     question_id = None
     try:
-        question_id, answer_items = _create_question_base(
+        question_id, answer_items, program_setting_id = _create_question_base(
             QuestionType.CODE,
             paper_id,
             question.score,
             question.insert_question_id,
         )
+
+        if program_setting_id is None:
+            raise ValueError("编程题创建失败, 未分配编程设置ID")
+        question.program_setting.id = program_setting_id
 
         _update_question_base(
             question_id,
@@ -232,6 +236,7 @@ def create_code_question(
             question.description,
             paper_id,
             required=question.required,
+            program_setting=question.program_setting,
         )
 
         if not all(
@@ -241,8 +246,8 @@ def create_code_question(
 
         result = _update_code_cases(
             answer_item_id=answer_items[0]["id"],
-            language=question.program_config.language[0].value,
-            code=question.program_config.example_code,
+            language=question.program_setting.language[0].value,
+            code=question.program_setting.example_code,
             input=in_cases,
         )
         if not result["success"]:
@@ -419,7 +424,8 @@ def _create_question_base(
     data = create_question(paper_id, question_type.value, score, insert_question_id)
     if not data["success"]:
         raise ValueError(data.get("msg") or data.get("message", "未知错误"))
-    return data["data"]["id"], data["data"]["answer_items"]
+    program_setting_id = data["data"].get("program_setting", {}).get("id")
+    return (data["data"]["id"], data["data"]["answer_items"], program_setting_id)
 
 
 def _update_question_base(

@@ -17,7 +17,7 @@ from ...types.types import (
     AnswerChecked,
     AutoScoreType,
     LineText,
-    ProgramConfig,
+    ProgramSetting,
     QuestionScoreType,
     RequiredType,
     AutoStatType,
@@ -69,40 +69,35 @@ def update_question(
                     """.replace("\n", " ").strip(),
         ),
     ] = None,
-    program_config: Annotated[
-        Optional[ProgramConfig], Field(description="编程题配置(仅编程题)")
+    program_setting: Annotated[
+        Optional[ProgramSetting], Field(description="编程题配置(仅编程题)")
     ] = None,
 ) -> dict:
     """更新题目设置"""
     try:
         url = f"{MAIN_URL}/survey/updateQuestion"
-        response = requests.post(
-            url,
-            json={
-                "question_id": str(question_id),
-                **({"title": word_text(title)} if title is not None else {}),
-                **({"description": description} if description is not None else {}),
-                **({"required": required} if required is not None else {}),
-                **({"score": score} if score is not None else {}),
-                **(
-                    {"is_split_answer": is_split_answer}
-                    if is_split_answer is not None
-                    else {}
-                ),
-                **(
-                    {"automatic_stat": automatic_stat}
-                    if automatic_stat is not None
-                    else {}
-                ),
-                **(
-                    {"automatic_type": automatic_type}
-                    if automatic_type is not None
-                    else {}
-                ),
-                **({"program_config": program_config.dict()} if program_config else {}),
-            },
-            headers=create_headers(),
-        ).json()
+        payload = {"question_id": str(question_id)}
+
+        if title is not None:
+            payload["title"] = word_text(title)
+        if description is not None:
+            payload["description"] = description
+        if required is not None:
+            payload["required"] = required
+        if score is not None:
+            payload["score"] = score
+        if is_split_answer is not None:
+            payload["is_split_answer"] = is_split_answer
+        if automatic_stat is not None:
+            payload["automatic_stat"] = automatic_stat
+        if automatic_type is not None:
+            payload["automatic_type"] = automatic_type
+        if program_setting is not None:
+            if program_setting.id is None:
+                raise ValueError("编程题创建失败, 没有题目设置ID")
+            payload["program_setting"] = program_setting.model_dump()
+
+        response = requests.post(url, json=payload, headers=create_headers()).json()
 
         if response.get("success"):
             return ResponseUtil.success(None, "题目设置更新成功")
@@ -246,11 +241,13 @@ def update_code_test_cases(
         List[dict[str, str]], Field(description="输入数据[{'in': '输入内容'}]")
     ],
 ) -> dict:
-    """更新编程题的测试用例"""
+    """更新编程题的测试用例(注意:此操作会覆盖原有测试用例)"""
     try:
         result = update_question(
             question_id=question_id,
-            program_config=ProgramConfig(example_language=language, example_code=code),
+            program_setting=ProgramSetting(
+                example_language=language, example_code=code
+            ),
         )
         if not result.get("success"):
             return ResponseUtil.error(

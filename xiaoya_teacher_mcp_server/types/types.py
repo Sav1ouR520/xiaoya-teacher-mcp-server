@@ -1,8 +1,7 @@
 # 类型枚举定义
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
-from enum import Enum
 
 
 class LineText(BaseModel):
@@ -276,7 +275,7 @@ class AnswerChecked(IntEnum):
         return name_map.get(value, default)
 
 
-class ProgrammingLanguage(Enum):
+class ProgrammingLanguage(StrEnum):
     """编程语言枚举"""
 
     C = "c"
@@ -363,7 +362,7 @@ class QuestionData(BaseModel):
         description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
         min_length=1,
     )
-    score: int = Field(description="题目分数", ge=0, default=2)
+    score: int = Field(description="题目分数", gt=0, default=2)
     answer_items: List[AnswerItem] = Field(
         description="""选项列表:
                         - 单选题/多选题: [{'seqno': 'X', 'context': '选项内容'}*n]; (X为选项,如A/B/C...的形式);
@@ -483,9 +482,12 @@ class FillBlankQuestion(BaseModel):
     )
 
 
-class ProgramConfig(BaseModel):
+class ProgramSetting(BaseModel):
     """编程题配置"""
 
+    id: Optional[str] = Field(
+        default=None, description="题目ID(更新题目时使用,新增题目不传递)"
+    )
     max_memory: Optional[int] = Field(default=5000, description="内存限制(kb)", gt=0)
     max_time: Optional[int] = Field(default=500, description="时间限制(ms)", gt=0)
 
@@ -493,14 +495,14 @@ class ProgramConfig(BaseModel):
         default=2, description="是否允许试运行(1是关闭,2是开启)", ge=1, le=2
     )
     debug_count: Optional[int] = Field(
-        default=9999, description="试运行次数", gt=0, le=9999
+        default=9999, description="试运行次数", ge=0, le=9999
     )
 
     runcase: Optional[int] = Field(
         default=1, description="是否允许运行测试用例(1是关闭,2是开启)", ge=1, le=2
     )
     runcase_count: Optional[int] = Field(
-        default=9999, description="运行测试用例次数", gt=0, le=9999
+        default=9999, description="运行测试用例次数", ge=0, le=9999
     )
 
     language: List[ProgrammingLanguage] = Field(
@@ -515,7 +517,7 @@ class ProgramConfig(BaseModel):
     )
     example_code: str = Field(
         default=None,
-        description="参考答案代码,必须要足够详细的注释(通过\n换行;code_answer和example_code可以一致)",
+        description="示例代码,用于跑测试用例,通过输入测试用例获取对应的输出答案(通过\n换行;code_answer和example_code可以一致)",
     )
 
     answer_language: ProgrammingLanguage = Field(
@@ -547,7 +549,7 @@ class CodeQuestion(BaseModel):
         description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
         min_length=1,
     )
-    program_config: ProgramConfig = Field(description="编程题配置")
+    program_setting: ProgramSetting = Field(description="编程题配置")
     score: int = Field(default=2, description="题目分数", gt=0)
     required: Optional[RequiredType] = Field(
         default=RequiredType.YES, description="是否必答(1=否, 2=是)"
