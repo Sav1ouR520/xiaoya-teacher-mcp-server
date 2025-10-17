@@ -246,8 +246,8 @@ def create_code_question(
 
         result = _update_code_cases(
             answer_item_id=answer_items[0]["id"],
-            language=question.program_setting.language[0].value,
-            code=question.program_setting.example_code,
+            language=question.program_setting.answer_language,
+            code=question.program_setting.code_answer,
             input=in_cases,
         )
         if not result["success"]:

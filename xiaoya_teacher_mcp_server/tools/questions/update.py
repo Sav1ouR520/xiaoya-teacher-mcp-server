@@ -96,6 +96,10 @@ def update_question(
             if program_setting.id is None:
                 raise ValueError("编程题创建失败, 没有题目设置ID")
             payload["program_setting"] = program_setting.model_dump()
+            payload["program_setting"]["example_language"] = (
+                program_setting.answer_language
+            )
+            payload["program_setting"]["example_code"] = program_setting.code_answer
 
         response = requests.post(url, json=payload, headers=create_headers()).json()
 
@@ -235,25 +239,27 @@ def update_true_false_answer(
 def update_code_test_cases(
     question_id: Annotated[str, Field(description="题目id")],
     answer_item_id: Annotated[str, Field(description="答案项ID")],
-    language: Annotated[str, Field(description="编程语言")],
-    code: Annotated[str, Field(description="运行代码")],
+    answer_language: Annotated[str, Field(description="答案代码编程语言")],
+    code_answer: Annotated[str, Field(description="答案代码[即将运行的代码]")],
     input: Annotated[
         List[dict[str, str]], Field(description="输入数据[{'in': '输入内容'}]")
     ],
 ) -> dict:
-    """更新编程题的测试用例(注意:此操作会覆盖原有测试用例)"""
+    """更新编程题答案代码和测试用例,运行答案代码,自动生成测试用例(注意:会覆盖原有用例)"""
     try:
         result = update_question(
             question_id=question_id,
             program_setting=ProgramSetting(
-                example_language=language, example_code=code
+                id=answer_item_id,
+                answer_language=answer_language,
+                code_answer=code_answer,
             ),
         )
         if not result.get("success"):
             return ResponseUtil.error(
                 result.get("msg") or result.get("message", "未知错误")
             )
-        return _update_code_cases(answer_item_id, language, code, input)
+        return _update_code_cases(answer_item_id, answer_language, code_answer, input)
     except Exception as e:
         return ResponseUtil.error("编程题测试用例更新失败", e)
 

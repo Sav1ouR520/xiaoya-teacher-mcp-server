@@ -511,22 +511,13 @@ class ProgramSetting(BaseModel):
         default=[ProgrammingLanguage.C],
     )
 
-    example_language: ProgrammingLanguage = Field(
-        default=ProgrammingLanguage.C,
-        description="示例代码语言(默认和language第一个一致)",
-    )
-    example_code: str = Field(
-        default=None,
-        description="示例代码,用于跑测试用例,通过输入测试用例获取对应的输出答案(通过\n换行;code_answer和example_code可以一致)",
-    )
-
     answer_language: ProgrammingLanguage = Field(
         default=ProgrammingLanguage.C,
         description="参考答案代码语言(默认和language第一个一致)",
     )
     code_answer: str = Field(
         default=None,
-        description="参考答案代码,必须要足够详细的注释(通过\n换行;code_answer和example_code可以一致)",
+        description="参考答案代码,必须要足够详细的注释(通过\n换行)",
     )
 
 
