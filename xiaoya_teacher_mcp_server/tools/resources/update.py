@@ -138,7 +138,8 @@ def batch_update_resource_download(
                     {
                         "node_id": node_id,
                         "msg": response.get("msg")
-                        or response.get("message", "未知错误"),
+                        or response.get("message")
+                        or "未知错误",
                     }
                 )
         result = {
@@ -182,7 +183,8 @@ def batch_update_resource_visibility(
                     {
                         "node_id": nid,
                         "msg": response.get("msg")
-                        or response.get("message", "未知错误"),
+                        or response.get("message")
+                        or "未知错误",
                     }
                 )
         result = {

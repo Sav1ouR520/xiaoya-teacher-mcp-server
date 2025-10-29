@@ -54,7 +54,9 @@ def change_attendance_status(
                     failed_list.append(
                         {
                             "register_user_id": item["register_user_id"],
-                            "error": resp.get("msg") or resp.get("message", "未知错误"),
+                            "error": resp.get("msg")
+                            or resp.get("message")
+                            or "未知错误",
                         }
                     )
             except Exception as e:

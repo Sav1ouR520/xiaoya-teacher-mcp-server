@@ -4,13 +4,13 @@
 本模块为课程管理系统提供任务相关的查询功能,包括课程组任务列表、任务详情、学生答题情况等,供 MCP 工具调用.
 """
 
-import json
 import requests
 from typing import Annotated
 from pydantic import Field
 
+from ...tools.questions.query import parse_answer_items, parse_text
 from ..resources.query import query_course_resources
-from ...types.types import AnswerChecked, AnswerStatus
+from ...types.types import AnswerStatus, QuestionType
 from ...utils.response import ResponseUtil
 from ...config import MAIN_URL, create_headers, MCP
 
@@ -127,68 +127,31 @@ def query_preview_student_paper(
             },
         ).json()
         if response.get("success"):
-
-            def parse_text(text):
-                try:
-                    blocks = json.loads(text).get("blocks", [])
-                    return (
-                        "\n".join(block.get("text", "") for block in blocks)
-                        if blocks
-                        else text
-                    )
-                except Exception:
-                    return text
-
-            def parse_answer_items(answer_items, question_type):
-                if question_type in [1, 2]:
-                    return [
-                        {
-                            "id": item["id"],
-                            "value": parse_text(item["value"]),
-                            "answer": AnswerChecked.get(item["answer_checked"]),
-                        }
-                        for item in answer_items
-                    ]
-                elif question_type == 5:
-                    return [
-                        {
-                            "id": item["id"],
-                            "answer": AnswerChecked.get(item["answer_checked"]),
-                        }
-                        for item in answer_items
-                    ]
-                elif question_type == 4:
-                    return [
-                        {"id": item["id"], "answer": item["answer"]}
-                        for item in answer_items
-                    ]
-                elif question_type == 10:
-                    return [
-                        {"id": item["id"], "answer": json.loads(item["answer"])}
-                        for item in answer_items
-                    ]
-
-            record = response["data"]["answer_record"]
-            questions = response["data"]["questions"]
-            answer_map = {ans["question_id"]: ans for ans in record["answers"]}
-
+            answer_map = {
+                ans["question_id"]: ans
+                for ans in response["data"]["answer_record"]["answers"]
+            }
             integrated_questions = []
-            for q in questions:
-                user_ans = answer_map[q["id"]]
-                integrated_questions.append(
-                    {
-                        "id": q["id"],
-                        "title": parse_text(q["title"]),
-                        "description": parse_text(q["description"]),
-                        "score": q["score"],
-                        "options": parse_answer_items(
-                            q["answer_items"], q.get("type", 1)
-                        ),
-                        "user_answer": parse_text(user_ans["answer"]),
-                        "user_score": user_ans["score"],
-                        "program_setting": q.get("program_setting", None),
-                    }
-                )
+            for q in response["data"]["questions"]:
+                data = {
+                    "id": q["id"],
+                    "title": parse_text(q["title"]),
+                    "description": parse_text(q["description"]),
+                    "type": QuestionType.get(q["type"]),
+                    "score": q["score"],
+                    "user": {
+                        "answer": parse_text(answer_map[q["id"]]["answer_items"]),
+                        "score": answer_map[q["id"]]["score"],
+                    },
+                }
+                if len(q["answer_items"]) > 0:
+                    data["options"] = parse_answer_items(q["answer_items"], q["type"])
+                if data["type"] == QuestionType.CODE.value:
+                    data["program_setting"] = q["program_setting"]
+                    data["user"]["test_case_info"] = parse_text(
+                        answer_map[q["id"]]["info"]
+                    ).get("data", [])
+                integrated_questions.append(data)
 
             return ResponseUtil.success(integrated_questions, "学生答题预览查询成功")
         else:

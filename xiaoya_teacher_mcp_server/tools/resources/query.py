@@ -12,7 +12,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import Field
 from urllib.parse import quote
 
-
+from ...types.types import ResourceType
 from ...utils.response import ResponseUtil
 from ...config import MAIN_URL, DOWNLOAD_URL, create_headers, MCP
 
@@ -43,7 +43,7 @@ def query_course_resources(
 
         resources = [
             {
-                key: item[key]
+                (key if key != "quote_id" else "paper_id"): item[key]
                 for key in [
                     "id",
                     "parent_id",
@@ -78,7 +78,7 @@ def query_course_resources(
                 ]
 
         for resource in resources:
-            resource["is_folder"] = resource["mimetype"] is None
+            resource["is_folder"] = resource["type"] == ResourceType.FOLDER.value
             resource["sort_position"] = resource["sort_position"]
             resource["level"] = len(resource["path"].split("/")) - 1
             if format_type == "tree" and resource["is_folder"]:
@@ -124,7 +124,7 @@ def query_course_resources(
 
 @MCP.tool()
 def download_file(
-    quote_id: Annotated[str, Field(description="文件quote_id")],
+    paper_id: Annotated[str, Field(description="文件paper_id")],
     filename: Annotated[str, Field(description="资源文件名")],
     save_path: Annotated[
         Optional[str],
@@ -133,7 +133,7 @@ def download_file(
 ) -> dict:
     """获取下载链接并自动下载文件内容,保存到本地磁盘"""
     try:
-        url = f"{DOWNLOAD_URL}/cloud/file_down/{quote_id}/v2?filename={quote(filename)}"
+        url = f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}"
         response = requests.get(url, headers=create_headers()).json()
         if not response.get("success"):
             return ResponseUtil.error(
@@ -166,8 +166,8 @@ def download_file(
 
 @MCP.tool()
 def read_file_by_markdown(
-    quote_id: Annotated[
-        Optional[str], Field(description="文件quote_id", default=None)
+    paper_id: Annotated[
+        Optional[str], Field(description="文件paper_id", default=None)
     ] = None,
     filename: Annotated[
         Optional[str], Field(description="资源文件名", default=None)
@@ -176,7 +176,7 @@ def read_file_by_markdown(
         Optional[str], Field(description="本地磁盘文件路径", default=None)
     ] = None,
 ) -> dict:
-    """使用markitdown工具读取本地文件路径(提供file_path)或小雅资源(需同时提供quote_id和filename)的文件内容并转换为markdown格式"""
+    """使用markitdown工具读取本地文件路径(提供file_path)或小雅资源(需同时提供paper_id和filename)的文件内容并转换为markdown格式"""
     try:
         if file_path:
             result = MarkItDown().convert(Path(file_path))
@@ -184,8 +184,8 @@ def read_file_by_markdown(
                 {"content": result.text_content},
                 f"本地文件转换为markdown成功: {file_path}",
             )
-        elif quote_id and filename:
-            url = f"{DOWNLOAD_URL}/cloud/file_down/{quote_id}/v2?filename={quote(filename)}"
+        elif paper_id and filename:
+            url = f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}"
             response = requests.get(url, headers=create_headers()).json()
             if not response.get("success"):
                 return ResponseUtil.error(f"获取文件下载链接失败,文件名:{filename}")

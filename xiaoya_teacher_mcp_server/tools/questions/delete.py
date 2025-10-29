@@ -43,6 +43,7 @@ def delete_questions(
 
 @MCP.tool()
 def delete_answer_item(
+    paper_id: Annotated[str, Field(description="试卷id")],
     question_id: Annotated[str, Field(description="题目id")],
     answer_item_id: Annotated[str, Field(description="选项id")],
 ) -> dict:
@@ -52,6 +53,7 @@ def delete_answer_item(
         response = requests.post(
             url,
             json={
+                "paper_id": str(paper_id),
                 "question_id": str(question_id),
                 "answer_item_id": str(answer_item_id),
             },
@@ -61,7 +63,7 @@ def delete_answer_item(
             return ResponseUtil.success(None, "选项删除成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("删除题目选项时发生异常", e)

@@ -10,15 +10,7 @@ from typing import Any, Dict
 
 
 def adjust_time_fields(data: Any) -> Any:
-    """
-    递归调整数据中的时间字段,直接转换时区+8小时
-
-    参数:
-        data: 要处理的数据(可以是字典、列表或其他类型)
-
-    返回:
-        调整后的数据
-    """
+    """递归调整数据中的时间字段,直接转换时区+8小时"""
     time_fields = {
         "start_time",
         "end_time",
@@ -69,14 +61,42 @@ class ResponseUtil:
 
     @staticmethod
     def error(message: str = "操作失败", exception: Exception = None) -> Dict[str, Any]:
-        """创建错误响应 - 最简化版本"""
-        if exception is not None:
+        """创建错误响应 - 支持多个traceback"""
+        if exception is not None and isinstance(exception, Exception):
             import traceback
+
+            error_chain = []
+            current = exception
+            while current is not None:
+                tb_lines = traceback.format_exception(
+                    type(current), current, current.__traceback__
+                )
+                simplified_tb = []
+                for line in tb_lines:
+                    for split_line in line.split("\n"):
+                        if not split_line:
+                            continue
+                        if "xiaoya_teacher_mcp_server" in split_line:
+                            idx = split_line.find("xiaoya_teacher_mcp_server")
+                            simplified_tb.append(split_line[idx:])
+                        else:
+                            simplified_tb.append(split_line)
+
+                error_chain.append(
+                    {
+                        "type": type(current).__name__,
+                        "message": str(current),
+                        "traceback": simplified_tb,
+                    }
+                )
+                current = getattr(current, "__cause__", None) or getattr(
+                    current, "__context__", None
+                )
 
             message = {
                 "type": type(exception).__name__,
                 "message": str(exception),
-                "traceback": traceback.format_exc().strip().split("\n"),
+                "exception": error_chain,
             }
 
         return {

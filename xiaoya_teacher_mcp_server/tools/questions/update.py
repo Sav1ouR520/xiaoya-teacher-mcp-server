@@ -11,6 +11,7 @@ import string
 from typing import Annotated, List, Optional
 from pydantic import Field
 
+from ...tools.questions.query import parse_question, parse_text
 from ...utils.response import ResponseUtil
 from ...config import MAIN_URL, create_headers, MCP
 from ...types.types import (
@@ -72,8 +73,9 @@ def update_question(
     program_setting: Annotated[
         Optional[ProgramSetting], Field(description="编程题配置(仅编程题)")
     ] = None,
+    need_parse: Annotated[bool, Field(description="是否返回解析题目内容")] = False,
 ) -> dict:
-    """更新题目设置"""
+    """[不限制题型]更新题目设置(注意:请根据题型谨慎操作,给没有指定配置的题型传入错误设置会导致整个卷子无法使用,只能删除整张卷子或删除错误设置的题目,使卷子恢复正常)"""
     try:
         url = f"{MAIN_URL}/survey/updateQuestion"
         payload = {"question_id": str(question_id)}
@@ -94,21 +96,34 @@ def update_question(
             payload["automatic_type"] = automatic_type
         if program_setting is not None:
             if program_setting.id is None:
-                raise ValueError("编程题创建失败, 没有题目设置ID")
+                raise ValueError("编程题创建/更新失败, 需要传递题目设置ID")
             payload["program_setting"] = program_setting.model_dump()
             payload["program_setting"]["example_language"] = (
                 program_setting.answer_language
             )
             payload["program_setting"]["example_code"] = program_setting.code_answer
-
+            del payload["program_setting"]["in_cases"]
+            del payload["program_setting"]["answer_item_id"]
         response = requests.post(url, json=payload, headers=create_headers()).json()
-
-        if response.get("success"):
-            return ResponseUtil.success(None, "题目设置更新成功")
-        else:
+        if not response.get("success"):
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
+        message = "题目设置更新成功"
+        if program_setting is not None:
+            case_response = _update_code_cases(
+                question_id,
+                program_setting.answer_item_id,
+                program_setting.answer_language,
+                program_setting.code_answer,
+                program_setting.in_cases,
+            )
+            response["data"]["answer_items"] = case_response[0]
+            message = "题目设置及测试用例更新成功"
+        return ResponseUtil.success(
+            parse_question(response["data"], need_parse), message
+        )
+
     except Exception as e:
         return ResponseUtil.error("题目设置更新失败", e)
 
@@ -120,7 +135,7 @@ def update_question_options(
     option_text: Annotated[Optional[str], Field(description="选项文本内容")] = None,
     is_answer: Annotated[Optional[bool], Field(description="是否为正确答案")] = False,
 ) -> dict:
-    """更新单选或多选题的选项内容"""
+    """[仅限单选/多选题]更新单选或多选题的选项内容"""
     try:
         payload = {
             "question_id": str(question_id),
@@ -140,76 +155,51 @@ def update_question_options(
         if response.get("success"):
             simplified_data = [
                 {
-                    "id": item["id"],
-                    "question_id": item["question_id"],
-                    "answer": item["value"],
-                    "correct": AnswerChecked.get(item["answer_checked"]),
+                    "answer_item_id": item["id"],
+                    "value": parse_text(item["value"]),
+                    "answer": AnswerChecked.get(item["answer_checked"]),
                 }
                 for item in response["data"]
             ]
             return ResponseUtil.success(simplified_data, "单/多选题选项更新成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("单/多选题选项更新失败", e)
 
 
 @MCP.tool()
-def update_fill_blank_options(
-    question_id: Annotated[str, Field(description="题目id")],
-    answer_item_id: Annotated[str, Field(description="选项id")],
-    answer: Annotated[str, Field(description="选项文本内容")],
-) -> dict:
-    """更新填空题的选项内容"""
-    try:
-        response = requests.post(
-            url=f"{MAIN_URL}/survey/updateAnswerItem",
-            json={
-                "question_id": str(question_id),
-                "answer_item_id": str(answer_item_id),
-                "value": answer,
-            },
-            headers=create_headers(),
-        ).json()
-
-        if response.get("success"):
-            simplified_data = [
-                {
-                    "id": item["id"],
-                    "question_id": item["question_id"],
-                    "answer": item["answer"],
-                }
-                for item in response["data"]
-            ]
-            return ResponseUtil.success(simplified_data, "填空题选项更新成功")
-        else:
-            return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
-            )
-    except Exception as e:
-        return ResponseUtil.error("填空题选项更新失败", e)
-
-
-@MCP.tool()
 def update_fill_blank_answer(
     question_id: Annotated[str, Field(description="题目id")],
     answer_item_id: Annotated[str, Field(description="答案项id")],
-    answer_text: Annotated[str, Field(description="答案文本内容")],
+    answer: Annotated[str, Field(description="答案文本内容")],
 ) -> dict:
-    """更新填空答案"""
+    """[仅限填空题]更新填空题指定填空答案"""
     try:
         response = requests.post(
             f"{MAIN_URL}/survey/updateAnswerItem",
             json={
                 "question_id": str(question_id),
                 "answer_item_id": str(answer_item_id),
-                "answer": answer_text,
+                "answer": answer,
             },
             headers=create_headers(),
         ).json()
-        return ResponseUtil.success(response, "填空题答案更新成功")
+        if response.get("success"):
+            simplified_data = [
+                {
+                    "answer_item_id": item["id"],
+                    "answer": item["answer"],
+                }
+                for item in response["data"]
+            ]
+            return ResponseUtil.success(simplified_data, "填空题指定填空答案更新成功")
+        else:
+            return ResponseUtil.error(
+                response.get("msg") or response.get("message") or "未知错误"
+            )
     except Exception as e:
         return ResponseUtil.error("填空题答案更新失败", e)
 
@@ -219,7 +209,7 @@ def update_true_false_answer(
     question_id: Annotated[str, Field(description="题目id")],
     answer_item_id: Annotated[str, Field(description="答案项id")],
 ) -> dict:
-    """更新判断题答案,将选项id对应的选项设为正确答案"""
+    """[仅限判断题]更新判断题答案,将选项id对应的选项设为正确答案"""
     try:
         response = requests.post(
             f"{MAIN_URL}/survey/updateAnswerItem",
@@ -230,36 +220,95 @@ def update_true_false_answer(
             },
             headers=create_headers(),
         ).json()
-        return ResponseUtil.success(response, "判断题答案更新成功")
+        if response.get("success"):
+            simplified_data = [
+                {
+                    "answer_item_id": item["id"],
+                    "answer": AnswerChecked.get(item["answer_checked"]),
+                }
+                for item in response["data"]
+            ]
+            return ResponseUtil.success(simplified_data, "判断题答案更新成功")
+        else:
+            return ResponseUtil.error(
+                response.get("msg") or response.get("message") or "未知错误"
+            )
     except Exception as e:
         return ResponseUtil.error("判断题答案更新失败", e)
 
 
 @MCP.tool()
-def update_code_test_cases(
+def update_short_answer_answer(
     question_id: Annotated[str, Field(description="题目id")],
-    answer_item_id: Annotated[str, Field(description="答案项ID")],
-    answer_language: Annotated[str, Field(description="答案代码编程语言")],
-    code_answer: Annotated[str, Field(description="答案代码[即将运行的代码]")],
-    input: Annotated[
-        List[dict[str, str]], Field(description="输入数据[{'in': '输入内容'}]")
+    answer_item_id: Annotated[str, Field(description="答案项id")],
+    answer: Annotated[
+        list[LineText],
+        Field(
+            description="参考答案(支持富文本，多行):\n"
+            "- 多行:列表形式\n"
+            "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
+            "- 参考答案格式例下(一行版本,可以多行,必须时换行):\n"
+            "  {\n"
+            "    'text': '参考答案内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
+            "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
+            "  }\n"
+        ),
     ],
 ) -> dict:
-    """更新编程题答案代码和测试用例,运行答案代码,自动生成测试用例(注意:会覆盖原有用例)"""
+    """[仅限简答题]更新简答题参考答案"""
+    try:
+        response = requests.post(
+            f"{MAIN_URL}/survey/updateAnswerItem",
+            json={
+                "question_id": str(question_id),
+                "answer_item_id": str(answer_item_id),
+                "answer": word_text(answer),
+            },
+            headers=create_headers(),
+        ).json()
+        if response.get("success"):
+            simplified_data = [
+                {
+                    "answer_item_id": item["id"],
+                    "answer": parse_text(item["answer"]),
+                }
+                for item in response["data"]
+            ]
+            return ResponseUtil.success(simplified_data, "简答题参考答案更新成功")
+    except Exception as e:
+        return ResponseUtil.error("简答题参考答案更新失败", e)
+
+
+@MCP.tool()
+def update_code_test_cases(
+    question_id: Annotated[str, Field(description="题目id")],
+    program_setting_id: Annotated[str, Field(description="题目设置ID")],
+    answer_item_id: Annotated[str, Field(description="题目答案项ID")],
+    answer_language: Annotated[str, Field(description="答案代码编程语言")],
+    code_answer: Annotated[str, Field(description="答案代码[即将运行的代码]")],
+    in_cases: Annotated[
+        List[dict[str, str]],
+        Field(description="测试用例的输入列表[{'in': '输入内容'}]", min_length=1),
+    ],
+) -> dict:
+    """[仅限编程题]更新编程题答案代码和测试用例,运行答案代码,自动生成测试用例(注意:会覆盖原有用例)"""
     try:
         result = update_question(
             question_id=question_id,
             program_setting=ProgramSetting(
-                id=answer_item_id,
+                id=program_setting_id,
+                answer_item_id=answer_item_id,
                 answer_language=answer_language,
                 code_answer=code_answer,
+                in_cases=in_cases,
             ),
         )
-        if not result.get("success"):
+        if result.get("success"):
+            return ResponseUtil.success(result["data"], "编程题测试用例更新成功")
+        else:
             return ResponseUtil.error(
-                result.get("msg") or result.get("message", "未知错误")
+                result.get("msg") or result.get("message") or "未知错误"
             )
-        return _update_code_cases(answer_item_id, answer_language, code_answer, input)
     except Exception as e:
         return ResponseUtil.error("编程题测试用例更新失败", e)
 
@@ -294,7 +343,7 @@ def update_paper_randomization(
             return ResponseUtil.success(None, "试卷随机化设置更新成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("试卷随机化设置更新失败", e)
@@ -307,7 +356,7 @@ def move_answer_item(
         list[str], Field(description="按新顺序排列的选项id列表", min_length=1)
     ],
 ) -> dict:
-    """调整题目选项顺序"""
+    """[不限制题型]调整题目选项顺序"""
     try:
         response = requests.post(
             f"{MAIN_URL}/survey/moveAnswerItem",
@@ -321,7 +370,7 @@ def move_answer_item(
             return ResponseUtil.success(None, "题目选项顺序调整成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("题目选项顺序调整失败", e)
@@ -355,57 +404,69 @@ def update_paper_question_order(
             return ResponseUtil.success(filtered_data, "试卷题目顺序更新成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("试卷题目顺序更新失败", e)
 
 
 def _update_code_cases(
+    question_id: Annotated[str, Field(description="题目ID")],
     answer_item_id: Annotated[str, Field(description="答案项ID")],
     language: Annotated[str, Field(description="编程语言")],
     code: Annotated[str, Field(description="运行代码")],
-    input: Annotated[
-        List[dict[str, str]], Field(description="输入数据[{'in': '输入内容'}]")
+    in_cases: Annotated[
+        List[dict[str, str]],
+        Field(description="测试用例的输入列表[{'in': '输入内容'}]", min_length=1),
     ],
 ) -> dict:
-    try:
-        case_result = requests.post(
-            f"{MAIN_URL}/survey/program/runcase",
-            json={
-                "answer_item_id": answer_item_id,
-                "language": language,
-                "code": code,
-                "input": json.dumps(input),
-            },
-            headers=create_headers(),
-        ).json()
+    if not all(
+        isinstance(case, dict) and set(case.keys()) == {"in"} for case in in_cases
+    ):
+        raise ValueError("测试用例格式错误, 每个测试用例必须仅包含'in'字段")
+    case_result = requests.post(
+        f"{MAIN_URL}/survey/program/runcase",
+        json={
+            "answer_item_id": str(answer_item_id),
+            "language": language,
+            "code": code,
+            "input": json.dumps(in_cases),
+        },
+        headers=create_headers(),
+    ).json()
 
-        if not case_result.get("success"):
-            return ResponseUtil.error(
-                case_result.get("msg") or case_result.get("message", "未知错误")
-            )
+    if not case_result.get("success"):
+        raise ValueError(
+            case_result.get("msg") or case_result.get("message") or "未知错误"
+        )
+    if not case_result["data"]["pass"]:
+        raise ValueError(f"代码运行测试用例失败, 运行结果:{case_result['data']}")
 
-        if not case_result["data"]["pass"]:
-            return ResponseUtil.error(case_result["data"], "测试用例运行失败")
+    formatted_cases = [
+        {"id": f"use_case_{index}", "in": case["in"], "out": case["out"]}
+        for index, case in enumerate(case_result["data"]["result"])
+    ]
 
-        formatted_cases = [
-            {"id": f"use_case_{index}", "in": case["in"], "out": case["out"]}
-            for index, case in enumerate(case_result["data"]["result"])
-        ]
+    response = requests.post(
+        f"{MAIN_URL}/survey/updateAnswerItem",
+        json={
+            "question_id": str(question_id),
+            "answer_item_id": str(answer_item_id),
+            "answer": json.dumps(formatted_cases),
+        },
+        headers=create_headers(),
+    ).json()
 
-        response = requests.post(
-            f"{MAIN_URL}/survey/updateAnswerItem",
-            json={
-                "answer_item_id": str(answer_item_id),
-                "answer": json.dumps(formatted_cases),
-            },
-            headers=create_headers(),
-        ).json()
-
-        return ResponseUtil.success(response, "编程题测试用例更新成功")
-    except Exception as e:
-        return ResponseUtil.error("编程题测试用例更新失败", e)
+    if not response.get("success"):
+        raise ValueError(response.get("msg") or response.get("message") or "未知错误")
+    simplified_data = [
+        {
+            "answer_item_id": item["id"],
+            "answer": parse_text(item["answer"]),
+        }
+        for item in response["data"]
+    ]
+    return simplified_data
 
 
 def word_text(lines: list[LineText]) -> dict:

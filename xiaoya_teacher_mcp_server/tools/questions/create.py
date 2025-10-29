@@ -9,22 +9,30 @@ import requests
 from typing import Annotated, List, Optional
 from pydantic import Field
 
+from ..questions.query import parse_question
+
 from ..questions.update import (
-    _update_code_cases,
     update_fill_blank_answer,
     update_question,
     update_question_options,
+    update_short_answer_answer,
     update_true_false_answer,
 )
 from ..questions.delete import delete_questions
 from ...types.types import (
+    AttachmentQuestion,
     ChoiceQuestion,
     CodeQuestion,
+    FillBlankQuestionData,
     LineText,
+    MultipleChoiceQuestionData,
     QuestionType,
-    QuestionData,
+    ShortAnswerQuestion,
+    ShortAnswerQuestionData,
+    SingleChoiceQuestionData,
     TrueFalseQuestion,
     FillBlankQuestion,
+    TrueFalseQuestionData,
 )
 from typing import Union
 from ...utils.response import ResponseUtil
@@ -40,24 +48,23 @@ def create_single_choice_question(
     question_id = None
     try:
         question_id, answer_items, _ = _create_question_base(
-            QuestionType.SINGLE_CHOICE,
             paper_id,
+            QuestionType.SINGLE_CHOICE,
             question.score,
             question.insert_question_id,
         )
 
-        _update_question_base(
+        question_data = _update_question_base(
             question_id,
             question.title,
             question.description,
-            paper_id,
-            required=question.required,
+            question.required,
         )
 
         for _ in range(len(answer_items), len(question.options)):
             resp = create_answer_item(paper_id, question_id)
             if not resp.get("success"):
-                raise ValueError(resp.get("msg") or resp.get("message", "未知错误"))
+                raise ValueError(resp.get("msg") or resp.get("message") or "未知错误")
             answer_items.append(resp["data"])
 
         for item, option in zip(answer_items, question.options):
@@ -65,9 +72,11 @@ def create_single_choice_question(
                 question_id, item["id"], option.text, option.answer
             )
             if not result["success"]:
-                raise ValueError(result.get("msg") or result.get("message", "未知错误"))
-
-        return ResponseUtil.success(None, "单选题创建成功")
+                raise ValueError(
+                    result.get("msg") or result.get("message") or "未知错误"
+                )
+        question_data["options"] = result["data"]
+        return ResponseUtil.success(question_data, "单选题创建成功")
     except Exception as e:
         if question_id:
             delete_questions(paper_id, [question_id])
@@ -83,24 +92,23 @@ def create_multiple_choice_question(
     question_id = None
     try:
         question_id, answer_items, _ = _create_question_base(
-            QuestionType.MULTIPLE_CHOICE,
             paper_id,
+            QuestionType.MULTIPLE_CHOICE,
             question.score,
             question.insert_question_id,
         )
 
-        _update_question_base(
+        question_data = _update_question_base(
             question_id,
             question.title,
             question.description,
-            paper_id,
-            required=question.required,
+            question.required,
         )
 
         for _ in range(len(answer_items), len(question.options)):
             resp = create_answer_item(paper_id, question_id)
             if not resp.get("success"):
-                raise ValueError(resp.get("msg") or resp.get("message", "未知错误"))
+                raise ValueError(resp.get("msg") or resp.get("message") or "未知错误")
             answer_items.append(resp["data"])
 
         for item, option in zip(answer_items, question.options):
@@ -108,9 +116,11 @@ def create_multiple_choice_question(
                 question_id, item["id"], option.text, option.answer
             )
             if not result["success"]:
-                raise ValueError(result.get("msg") or result.get("message", "未知错误"))
-
-        return ResponseUtil.success(None, "多选题创建成功")
+                raise ValueError(
+                    result.get("msg") or result.get("message") or "未知错误"
+                )
+        question_data["options"] = result["data"]
+        return ResponseUtil.success(question_data, "多选题创建成功")
     except Exception as e:
         if question_id:
             delete_questions(paper_id, [question_id])
@@ -126,8 +136,8 @@ def create_fill_blank_question(
     question_id = None
     try:
         question_id = _create_question_base(
-            QuestionType.FILL_BLANK,
             paper_id,
+            QuestionType.FILL_BLANK,
             question.score,
             question.insert_question_id,
         )[0]
@@ -137,15 +147,14 @@ def create_fill_blank_question(
 
         result = create_blank_answer_items(paper_id, question_id, count)
         if not result["success"]:
-            raise ValueError(result.get("msg") or result.get("message", "未知错误"))
+            raise ValueError(result.get("msg") or result.get("message") or "未知错误")
         answer_items = result["data"]
 
-        _update_question_base(
+        question_data = _update_question_base(
             question_id,
             question.title,
             question.description,
-            paper_id,
-            required=question.required,
+            question.required,
             is_split_answer=question.is_split_answer,
             automatic_stat=question.automatic_stat,
             automatic_type=question.automatic_type,
@@ -154,9 +163,11 @@ def create_fill_blank_question(
         for item, option in zip(answer_items, question.options):
             result = update_fill_blank_answer(question_id, item["id"], option.text)
             if not result["success"]:
-                raise ValueError(result.get("msg") or result.get("message", "未知错误"))
-
-        return ResponseUtil.success(None, "填空题创建成功")
+                raise ValueError(
+                    result.get("msg") or result.get("message") or "未知错误"
+                )
+        question_data["options"] = result["data"]
+        return ResponseUtil.success(question_data, "填空题创建成功")
     except Exception as e:
         if question_id:
             delete_questions(paper_id, [question_id])
@@ -172,18 +183,17 @@ def create_true_false_question(
     question_id = None
     try:
         question_id, answer_items, _ = _create_question_base(
-            QuestionType.TRUE_FALSE,
             paper_id,
+            QuestionType.TRUE_FALSE,
             question.score,
             question.insert_question_id,
         )
 
-        _update_question_base(
+        question_data = _update_question_base(
             question_id,
             question.title,
             question.description,
-            paper_id,
-            required=question.required,
+            question.required,
         )
 
         answer_id = next(
@@ -198,9 +208,9 @@ def create_true_false_question(
             raise ValueError("未找到匹配的答案项")
         result = update_true_false_answer(question_id, answer_id)
         if not result["success"]:
-            raise ValueError(result.get("msg") or result.get("message", "未知错误"))
-
-        return ResponseUtil.success(None, "判断题创建成功")
+            raise ValueError(result.get("msg") or result.get("message") or "未知错误")
+        question_data["options"] = result["data"]
+        return ResponseUtil.success(question_data, "判断题创建成功")
     except Exception as e:
         if question_id:
             delete_questions(paper_id, [question_id])
@@ -208,51 +218,101 @@ def create_true_false_question(
 
 
 @MCP.tool()
+def create_short_answer_question(
+    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    question: Annotated[ShortAnswerQuestion, Field(description="简答题信息")],
+) -> dict:
+    """创建简答题"""
+    question_id = None
+    try:
+        question_id, answer_items, _ = _create_question_base(
+            paper_id,
+            QuestionType.SHORT_ANSWER,
+            question.score,
+            question.insert_question_id,
+        )
+
+        result = _update_question_base(
+            question_id,
+            question.title,
+            question.description,
+            question.required,
+        )
+
+        result["options"] = update_short_answer_answer(
+            question_id=question_id,
+            answer_item_id=answer_items[0]["id"],
+            answer=question.answer,
+        )
+
+        return ResponseUtil.success(result, "简答题创建成功")
+    except Exception as e:
+        if question_id:
+            delete_questions(paper_id, [question_id])
+        return ResponseUtil.error("创建简答题时发生异常", e)
+
+
+@MCP.tool()
+def create_attachment_question(
+    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    question: Annotated[AttachmentQuestion, Field(description="附件题信息")],
+    insert_question_id: Annotated[
+        Optional[str], Field(description="插入指定题目ID后面")
+    ] = None,
+) -> dict:
+    """创建附件题"""
+    question_id = None
+    try:
+        question_id = _create_question_base(
+            paper_id,
+            QuestionType.ATTACHMENT,
+            question.score,
+            insert_question_id,
+        )[0]
+
+        result = _update_question_base(
+            question_id,
+            question.title,
+            question.description,
+            question.required,
+        )
+
+        return ResponseUtil.success(result, "附件题创建成功")
+    except Exception as e:
+        if question_id:
+            delete_questions(paper_id, [question_id])
+        return ResponseUtil.error("创建附件题时发生异常", e)
+
+
+@MCP.tool()
 def create_code_question(
     paper_id: Annotated[str, Field(description="试卷paper_id")],
     question: Annotated[CodeQuestion, Field(description="编程题信息")],
-    in_cases: Annotated[
-        List[dict[str, str]],
-        Field(description="测试用例的输入列表[{'in': '输入内容'}]", min_length=1),
-    ],
 ) -> dict:
     """创建编程题"""
     question_id = None
     try:
         question_id, answer_items, program_setting_id = _create_question_base(
-            QuestionType.CODE,
             paper_id,
+            QuestionType.CODE,
             question.score,
             question.insert_question_id,
         )
 
         if program_setting_id is None:
             raise ValueError("编程题创建失败, 未分配编程设置ID")
+        if len(answer_items) == 0:
+            raise ValueError("编程题创建失败, 未分配答案项ID")
         question.program_setting.id = program_setting_id
-
-        _update_question_base(
+        question.program_setting.answer_item_id = answer_items[0]["id"]
+        result = _update_question_base(
             question_id,
             question.title,
             question.description,
-            paper_id,
-            required=question.required,
+            question.required,
             program_setting=question.program_setting,
         )
-
-        if not all(
-            isinstance(case, dict) and set(case.keys()) == {"in"} for case in in_cases
-        ):
-            raise ValueError("测试用例格式错误, 每个测试用例必须仅包含'in'字段")
-
-        result = _update_code_cases(
-            answer_item_id=answer_items[0]["id"],
-            language=question.program_setting.answer_language,
-            code=question.program_setting.code_answer,
-            input=in_cases,
-        )
-        if not result["success"]:
-            raise ValueError(result.get("msg") or result.get("message", "未知错误"))
-        return ResponseUtil.success(None, "编程题创建成功")
+        return ResponseUtil.success(result, "编程题创建并配置编程设置和测试用例成功")
     except Exception as e:
         if question_id:
             delete_questions(paper_id, [question_id])
@@ -268,49 +328,81 @@ def batch_create_questions(
                 ChoiceQuestion,
                 TrueFalseQuestion,
                 FillBlankQuestion,
+                AttachmentQuestion,
+                ShortAnswerQuestion,
             ]
         ],
         Field(description="题目列表", min_length=1),
     ],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
 ) -> dict:
-    """批量创建题目(非官方接口),不稳定但功能更强大[仅支持单选、多选、填空、判断题]"""
-    success_count, failed_count, results = 0, 0, []
+    """批量创建题目(非官方接口),不稳定但功能更强大[支持单选、多选、填空、判断、附件、简答题]"""
+    success_count, failed_count, results = 0, 0, {"details": [], "questions": []}
+
+    question_handlers = {
+        (ChoiceQuestion, QuestionType.SINGLE_CHOICE): create_single_choice_question,
+        (ChoiceQuestion, QuestionType.MULTIPLE_CHOICE): create_multiple_choice_question,
+        TrueFalseQuestion: create_true_false_question,
+        FillBlankQuestion: create_fill_blank_question,
+        ShortAnswerQuestion: create_short_answer_question,
+        AttachmentQuestion: create_attachment_question,
+    }
 
     for i, question in enumerate(questions, 1):
         try:
+            handler = None
             if isinstance(question, ChoiceQuestion):
-                if question.type == QuestionType.SINGLE_CHOICE:
-                    result = create_single_choice_question(paper_id, question)
-                else:
-                    result = create_multiple_choice_question(paper_id, question)
-            elif isinstance(question, TrueFalseQuestion):
-                result = create_true_false_question(paper_id, question)
-            elif isinstance(question, FillBlankQuestion):
-                result = create_fill_blank_question(paper_id, question)
+                handler = question_handlers.get((ChoiceQuestion, question.type))
+            else:
+                handler = question_handlers.get(type(question))
+
+            if handler is None:
+                failed_count += 1
+                results["details"].append(f"第{i}题: 创建失败 - 不支持的题目类型")
+                continue
+
+            result = handler(paper_id, question)
+
             if result["success"]:
                 success_count += 1
-                title_text = "".join(line.text for line in question.title)
-                results.append(f"第{i}题: 创建成功 - {title_text}")
+                results["questions"].append(result["data"])
+                results["details"].append(
+                    f"[第{i}题][创建成功][{QuestionType.get(question.type)}][{''.join(line.text for line in question.title)}]"
+                )
             else:
                 failed_count += 1
-                results.append(f"第{i}题: 创建失败 - {result['message']}")
+                results["details"].append(
+                    f"[第{i}题][创建失败][{QuestionType.get(question.type)}][{result['message']}]"
+                )
         except Exception as e:
             failed_count += 1
-            results.append(f"第{i}题: 创建异常 - {str(e)}")
-
-    summary = f"批量创建完成: 成功 {success_count} 题,失败 {failed_count} 题, 总计 {len(questions)} 题"
-    return ResponseUtil.success({"details": results}, summary)
+            results["details"].append(
+                f"[第{i}题][创建异常][{QuestionType.get(question.type)}][{str(e)}]"
+            )
+    if not need_detail:
+        results.pop("questions", None)
+    summary = f"[批量创建完成][成功{success_count}题][失败{failed_count}题][总计{len(questions)}题]"
+    return ResponseUtil.success(results, summary)
 
 
 @MCP.tool()
 def office_create_questions(
     paper_id: Annotated[str, Field(description="试卷paper_id")],
     questions: Annotated[
-        List[QuestionData],
+        List[
+            Union[
+                SingleChoiceQuestionData,
+                MultipleChoiceQuestionData,
+                FillBlankQuestionData,
+                TrueFalseQuestionData,
+                ShortAnswerQuestionData,
+            ]
+        ],
         Field(description="题目列表", min_length=1),
     ],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
 ) -> dict:
-    """批量导入题目(官方接口),稳定性强[仅支持单选、多选、填空、判断题]"""
+    """批量导入题目(官方接口),稳定性强[仅支持单选、多选、填空、判断、简答、附件题]"""
     url = f"{MAIN_URL}/survey/question/import"
     try:
         for i, question in enumerate(questions, 1):
@@ -321,7 +413,8 @@ def office_create_questions(
                     )
                 except ValueError as e:
                     return ResponseUtil.error(f"第{i}题格式错误", e)
-
+            elif question.type not in QuestionType:
+                return ResponseUtil.error(f"第{i}题类型不支持导入: {question.type}")
         response = requests.post(
             url,
             json={
@@ -331,12 +424,18 @@ def office_create_questions(
             headers=create_headers(),
         ).json()
         if response.get("success"):
+            if not need_detail:
+                return ResponseUtil.success(
+                    None,
+                    f"[批量导入完成][共{len(response['data'])}题]",
+                )
             return ResponseUtil.success(
-                response["data"], f"题目批量导入成功,共{len(response['data'])}题"
+                [parse_question(question) for question in response["data"]],
+                f"[批量导入完成][共{len(response['data'])}题]",
             )
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("批量导入题目时发生异常", e)
@@ -345,7 +444,7 @@ def office_create_questions(
 @MCP.tool()
 def create_question(
     paper_id: Annotated[str, Field(description="试卷paper_id")],
-    type_number: Annotated[int, Field(description="题目类型编号")],
+    question_type: Annotated[int, Field(description="题目类型编号")],
     score: Annotated[int, Field(description="题目分数", gt=0)],
     insert_question_id: Annotated[
         Optional[str], Field(description="插入指定题目ID后面")
@@ -353,21 +452,28 @@ def create_question(
 ) -> dict:
     """在试卷中创建新题目(空白题目)"""
     try:
+        payload = {
+            "paper_id": str(paper_id),
+            "type": question_type,
+            "score": score,
+        }
+        if insert_question_id is not None and len(insert_question_id) == 19:
+            payload["insert_question_id"] = str(insert_question_id)
+
         response = requests.post(
             f"{MAIN_URL}/survey/addQuestion",
-            json={
-                "type": type_number,
-                "paper_id": str(paper_id),
-                "score": score,
-                **(
-                    {"insert_question_id": insert_question_id}
-                    if insert_question_id is not None
-                    else {}
-                ),
-            },
+            json=payload,
             headers=create_headers(),
-        ).json()["data"]
-        return ResponseUtil.success(response, "题目创建成功")
+        ).json()
+        if response.get("success"):
+            return ResponseUtil.success(
+                parse_question(response["data"], False), "题目创建成功"
+            )
+        else:
+            return ResponseUtil.error(
+                response.get("msg") or response.get("message") or "未知错误"
+            )
+
     except Exception as e:
         return ResponseUtil.error("题目创建失败", e)
 
@@ -390,8 +496,15 @@ def create_blank_answer_items(
             },
             headers=create_headers(),
         )
-        response = response.json()["data"]["answer_items"]
-        return ResponseUtil.success(response, "空白答案项创建成功")
+        response = response.json()
+        if response.get("success"):
+            return ResponseUtil.success(
+                response["data"]["answer_items"], "空白答案项创建成功"
+            )
+        else:
+            return ResponseUtil.error(
+                response.get("msg") or response.get("message") or "未知错误"
+            )
     except Exception as e:
         return ResponseUtil.error("空白答案项创建失败", e)
 
@@ -415,33 +528,44 @@ def create_answer_item(
 
 
 def _create_question_base(
-    question_type: QuestionType,
     paper_id: str,
+    question_type: QuestionType,
     score: int,
     insert_question_id: Optional[str] = None,
 ) -> tuple:
     """创建题目基础信息并返回question_id和answer_items"""
     data = create_question(paper_id, question_type.value, score, insert_question_id)
     if not data["success"]:
-        raise ValueError(data.get("msg") or data.get("message", "未知错误"))
-    program_setting_id = data["data"].get("program_setting", {}).get("id")
-    return (data["data"]["id"], data["data"]["answer_items"], program_setting_id)
+        raise ValueError(data.get("msg") or data.get("message") or "未知错误")
+    program_setting_id = None
+    if question_type == QuestionType.CODE:
+        program_setting_id = data["data"]["program_setting"]["id"]
+    return (data["data"]["id"], data["data"]["options"], program_setting_id)
 
 
 def _update_question_base(
-    question_id: str, title: List[LineText], description: str, paper_id: str, **kwargs
+    question_id: str,
+    title: List[LineText],
+    description: str,
+    required: bool,
+    **kwargs,
 ) -> None:
     """更新题目基础信息, 失败时清理题目"""
     result = update_question(
-        question_id, title=title, description=description, **kwargs
+        question_id, title=title, description=description, required=required, **kwargs
     )
+
     if not result["success"]:
-        delete_questions(paper_id, [question_id])
-        raise ValueError(result.get("msg") or result.get("message", "未知错误"))
+        raise ValueError(result.get("msg") or result.get("message") or "未知错误")
+    return result["data"]
 
 
-def _validate_fill_blank_question(title: List[LineText], answers_count: int) -> None:
+def _validate_fill_blank_question(
+    title: List[LineText] | str, answers_count: int
+) -> None:
     """验证填空题的格式是否正确"""
+    if isinstance(title, str):
+        title = [LineText(text=title)]
     if not any("____" in line.text for line in title):
         raise ValueError("填空题标题必须包含空白标记'____'")
 

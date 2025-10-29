@@ -56,6 +56,7 @@ class QuestionType(IntEnum):
     FILL_BLANK = 4  # 填空题
     TRUE_FALSE = 5  # 判断题
     SHORT_ANSWER = 6  # 简答题
+    ATTACHMENT = 7  # 附件题
     CODE = 10  # 代码题
 
     @staticmethod
@@ -67,6 +68,7 @@ class QuestionType(IntEnum):
             4: "填空题",
             5: "判断题",
             6: "简答题",
+            7: "附件题",
             10: "代码题",
         }
         return name_map.get(value, default)
@@ -300,85 +302,182 @@ class ProgrammingLanguage(StrEnum):
     OBJECT_PASCAL = "object_pascal"
 
 
-class QuestionData(BaseModel):
-    """题目数据结构"""
+class StandardAnswer(BaseModel):
+    """标准答案"""
 
-    class StandardAnswer(BaseModel):
-        """标准答案"""
-
-        seqno: str = Field(
-            description="""标准答案内容(保持与standard_answers一致):
+    seqno: str = Field(
+        description="""标准答案内容(保持与standard_answers一致):
                             - 单选/多选题:填写A/B/C/D/E...;
                             - 填空题: 顺序填写1/2/3 (表示第几个空和answer_items的seqno对应);
                             - 判断题: 填写A/B;
+                            - 简答题: 固定填写A;
+                            - 附加题: 不需要此字段;
                         """.replace("\n", " ").strip(),
-            min_length=1,
-        )
-        standard_answer: str = Field(
-            description="""标准答案内容(保持与seqno一致):
+        min_length=1,
+    )
+    standard_answer: str = Field(
+        description="""标准答案内容(保持与seqno一致):
                             - 单选/多选题:填写A/B/C/D/E...;
                             - 填空题: 具体答案内容 (填空支持乱序/填空有多个答案时用英文分号';'隔开);
                             - 判断题: 填写A/B;
+                            - 简答题: 参考答案内容;
+                            - 附加题: 不需要此字段;
                         """.replace("\n", " ").strip(),
-            min_length=1,
-        )
+        min_length=1,
+    )
 
-    class AnswerItem(BaseModel):
-        """题目选项项"""
 
-        seqno: str = Field(
-            description="""选项序号:
+class AnswerItem(BaseModel):
+    """题目选项项"""
+
+    seqno: str = Field(
+        description="""选项序号:
                             - 单选/多选题:填写A/B/C/D/E...;
                             - 填空题: 填写1/2/3 (表示第几个空和standard_answers的seqno对应);
                             - 判断题: 填写A/B;
+                            - 简答/附加题: 固定填写A;
                         """.replace("\n", " ").strip(),
-            min_length=1,
-        )
-        context: Optional[str] = Field(
-            description="""选项内容
+        min_length=1,
+    )
+    context: Optional[str] = Field(
+        description="""选项内容
                             - 单选/多选题:填写具体选项内容;
                             - 填空题: 这里填写空字符串"";
                             - 判断题: 如果是A填写"true", 如果是B填写空字符串"";
+                            - 简答/附加题: 不需要此字段;
                         """.replace("\n", " ").strip(),
-            default=None,
-        )
+        default=None,
+    )
+
+
+class SingleChoiceQuestionData(BaseModel):
+    """官方批量导入单选题数据结构"""
 
     type: QuestionType = Field(
-        description="题目类型(1=单选题, 2=多选题, 4=填空题, 5=判断题)", ge=1, le=10
+        default=QuestionType.SINGLE_CHOICE, description="题目类型 1=单选题"
     )
-    title: List[LineText] = Field(
-        description="题目描述(填空题必须包含'____'作为空白标记,后续会自动根据'____'的多少创建填空框,选项数量必须与空白标记数量一致):\n",
+    title: str = Field(
+        description="题目描述",
         min_length=1,
     )
     standard_answers: List[StandardAnswer] = Field(
-        description="""标准答案列表:
-                        - 单选题/多选题: [{'seqno': 'X', 'standard_answer': 'X'}*n] (X为A/B/C...的形式,而且seqno和standard_answer两者一致);
-                        - 填空题: [{'seqno': 'X', 'standard_answer': '答案内容'}*n] (X为第X个空,和answer_items的seqno对应,standard_answers中答案数量和填空题题目描述中____的数量一致,填空题支持乱序/一个填空允许多个答案时用英文分号';'隔开);
-                        - 判断题为[{'seqno': 'X', 'standard_answer': 'X'}] (X为A/B,而且seqno和standard_answer两者一致,判断题只有一个正确答案,A为正确,B为错误);
-                    """.replace("\n", " ").strip(),
+        description="标准答案列表: [{'seqno': 'X', 'standard_answer': 'X'}] (X为A/B/C...的形式)",
         min_length=1,
     )
     description: str = Field(
-        description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
+        description="答案解析(答案请提供足够详细解析)",
         min_length=1,
     )
     score: int = Field(description="题目分数", gt=0, default=2)
     answer_items: List[AnswerItem] = Field(
-        description="""选项列表:
-                        - 单选题/多选题: [{'seqno': 'X', 'context': '选项内容'}*n]; (X为选项,如A/B/C...的形式);
-                        - 填空题:[{'seqno': '1'}, {'seqno': '2'}, ...] (表示第几个空和standard_answers的seqno对应,应该和填空题____数量一致);
-                        - 判断题为固定[{"seqno": "A", "context": "true"},{"seqno": "B","context": ""}],不要传递其他内容;
-                    """.replace("\n", " ").strip(),
+        description="选项列表: [{'seqno': 'X', 'context': '选项内容'}*n] (X为选项,如A/B/C...的形式)",
         min_length=1,
     )
-    automatic_type: Optional[AutoScoreType] = Field(
-        default=None,
-        description="""填空题自动评分类型(仅填空题)[必须严格根据题目情况选择]:
-                        - 1=精确匹配+有序排序: 答案必须完全匹配且顺序一致,适用于每个空只有一个正确答案的情况;
-                        - 2=部分匹配+有序排序: 答案部分匹配且顺序一致,适用于每个空有多个正确答案的情况;
-                        - 11=精确匹配+无序排序: 答案必须完全匹配但顺序不限,适用于每个空只有一个正确答案且答案顺序不重要的情况;
-                        - 12=部分匹配+无序排序: 答案部分匹配且顺序不限,适用于每个空有多个正确答案且答案顺序不重要的情况;
-                    """.replace("\n", " ").strip(),
+
+
+class MultipleChoiceQuestionData(BaseModel):
+    """官方批量导入多选题数据结构"""
+
+    type: QuestionType = Field(
+        default=QuestionType.MULTIPLE_CHOICE, description="题目类型 2=多选题"
+    )
+    title: str = Field(
+        description="题目描述",
+        min_length=1,
+    )
+    standard_answers: List[StandardAnswer] = Field(
+        description="标准答案列表: [{'seqno': 'X', 'standard_answer': 'X'}*n] (X为A/B/C...的形式)",
+        min_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析)",
+        min_length=1,
+    )
+    score: int = Field(description="题目分数", gt=0, default=2)
+    answer_items: List[AnswerItem] = Field(
+        description="选项列表: [{'seqno': 'X', 'context': '选项内容'}*n] (X为选项,如A/B/C...的形式)",
+        min_length=1,
+    )
+
+
+class FillBlankQuestionData(BaseModel):
+    """官方批量导入填空题数据结构"""
+
+    type: QuestionType = Field(
+        default=QuestionType.FILL_BLANK, description="题目类型 4=填空题"
+    )
+    title: str = Field(
+        description="题目描述(必须包含'____'作为空白标记,后续会自动根据'____'的多少创建填空框)",
+        min_length=1,
+    )
+    standard_answers: List[StandardAnswer] = Field(
+        description="标准答案列表: [{'seqno': 'X', 'standard_answer': '答案内容'}*n] (X为第X个空)",
+        min_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析)",
+        min_length=1,
+    )
+    score: int = Field(description="题目分数", gt=0, default=2)
+    answer_items: List[AnswerItem] = Field(
+        description="填空项列表: [{'seqno': '1'}, {'seqno': '2'}, ...] (表示第几个空)",
+        min_length=1,
+    )
+    automatic_type: AutoScoreType = Field(
+        description="填空题自动评分类型(必选)",
+    )
+
+
+class TrueFalseQuestionData(BaseModel):
+    """官方批量导入判断题数据结构"""
+
+    type: QuestionType = Field(
+        default=QuestionType.TRUE_FALSE, description="题目类型 5=判断题"
+    )
+    title: str = Field(
+        description="题目描述",
+        min_length=1,
+    )
+    standard_answers: List[StandardAnswer] = Field(
+        description="标准答案列表: [{'seqno': 'X', 'standard_answer': 'X'}] (X为A/B)",
+        min_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析)",
+        min_length=1,
+    )
+    score: int = Field(description="题目分数", gt=0, default=2)
+    answer_items: List[AnswerItem] = Field(
+        description="判断项列表: 固定为[{'seqno': 'A', 'context': 'true'}, {'seqno': 'B', 'context': ''}]",
+        min_length=2,
+        max_length=2,
+    )
+
+
+class ShortAnswerQuestionData(BaseModel):
+    """官方批量导入简答题数据结构"""
+
+    type: QuestionType = Field(
+        default=QuestionType.SHORT_ANSWER, description="题目类型 6=简答题"
+    )
+    title: str = Field(
+        description="题目描述",
+        min_length=1,
+    )
+    standard_answers: List[StandardAnswer] = Field(
+        description="标准答案列表: [{'seqno': 'A', 'standard_answer': '参考答案内容'}]",
+        min_length=1,
+        max_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析)",
+        min_length=1,
+    )
+    score: int = Field(description="题目分数", gt=0, default=2)
+    answer_items: List[AnswerItem] = Field(
+        description="答案项列表: 固定为[{'seqno': 'A'}]",
+        min_length=1,
+        max_length=1,
     )
 
 
@@ -468,8 +567,7 @@ class FillBlankQuestion(BaseModel):
     automatic_stat: Optional[AutoStatType] = Field(
         default=None, description="自动评分设置(1=关闭, 2=开启)"
     )
-    automatic_type: Optional[AutoScoreType] = Field(
-        default=None,
+    automatic_type: AutoScoreType = Field(
         description="""自动评分类型:
                         - 1=精确匹配+有序排序: 答案必须完全匹配且顺序一致,适用于每个空只有一个正确答案的情况;
                         - 2=部分匹配+有序排序: 答案部分匹配且顺序一致,适用于每个空有多个正确答案的情况;
@@ -482,12 +580,81 @@ class FillBlankQuestion(BaseModel):
     )
 
 
+class AttachmentQuestion(BaseModel):
+    """附件题"""
+
+    title: List[LineText] = Field(
+        description="题目描述(支持富文本，多行):\n"
+        "- 多行:列表形式\n"
+        "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
+        "- 题目描述格式例下(一行版本,可以多行,必须时换行):\n"
+        "  {\n"
+        "    'text': '题目内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
+        "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
+        "  }\n",
+        min_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
+        min_length=1,
+    )
+    score: int = Field(default=2, description="题目分数", gt=0)
+    required: Optional[RequiredType] = Field(
+        default=RequiredType.YES, description="是否必答(1=否, 2=是)"
+    )
+    insert_question_id: Optional[str] = Field(
+        default=None, description="插入指定题目ID后面"
+    )
+
+
+class ShortAnswerQuestion(BaseModel):
+    """简答题"""
+
+    title: List[LineText] = Field(
+        description="题目描述(支持富文本，多行):\n"
+        "- 多行:列表形式\n"
+        "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
+        "- 题目描述格式例下(一行版本,可以多行,必须时换行):\n"
+        "  {\n"
+        "    'text': '题目内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
+        "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
+        "  }\n",
+        min_length=1,
+    )
+    description: str = Field(
+        description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
+        min_length=1,
+    )
+    answer: List[LineText] = Field(
+        description="参考答案(支持富文本，多行):\n"
+        "- 多行:列表形式\n"
+        "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
+        "- 参考答案格式例下(一行版本,可以多行,必须时换行):\n"
+        "  {\n"
+        "    'text': '参考答案内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
+        "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
+        "  }\n",
+        min_length=1,
+    )
+    score: int = Field(default=2, description="题目分数", gt=0)
+    required: Optional[RequiredType] = Field(
+        default=RequiredType.YES, description="是否必答(1=否, 2=是)"
+    )
+    insert_question_id: Optional[str] = Field(
+        default=None, description="插入指定题目ID后面"
+    )
+
+
 class ProgramSetting(BaseModel):
     """编程题配置"""
 
-    id: Optional[str] = Field(
-        default=None, description="题目ID(更新题目时使用,新增题目不传递)"
+    id: str = Field(
+        description="题目配置ID(create_code_question会自动生成更新id,更新题目时必须传递)",
     )
+    answer_item_id: str = Field(
+        description="题目答案项ID(create_code_question会自动生成更新id,更新题目时必须传递)"
+    )
+
     max_memory: Optional[int] = Field(default=5000, description="内存限制(kb)", gt=0)
     max_time: Optional[int] = Field(default=500, description="时间限制(ms)", gt=0)
 
@@ -502,7 +669,56 @@ class ProgramSetting(BaseModel):
         default=1, description="是否允许运行测试用例(1是关闭,2是开启)", ge=1, le=2
     )
     runcase_count: Optional[int] = Field(
-        default=9999, description="运行测试用例次数", ge=0, le=9999
+        default=100, description="运行测试用例次数", ge=0, le=100
+    )
+
+    language: Optional[List[ProgrammingLanguage]] = Field(
+        description="允许使用的编程语言列表",
+        min_length=1,
+        default=[ProgrammingLanguage.C],
+    )
+
+    answer_language: Optional[ProgrammingLanguage] = Field(
+        default=ProgrammingLanguage.C,
+        description="参考答案代码语言(默认和language第一个一致)",
+    )
+    code_answer: Optional[str] = Field(
+        default=None,
+        description="参考答案代码,必须要足够详细的注释(通过\n换行)",
+    )
+
+    in_cases: Optional[List[dict[str, str]]] = Field(
+        default=None,
+        description="测试用例的输入列表[{'in': '输入内容'}]",
+        min_length=1,
+    )
+
+
+class ProgramSettingAllNeed(BaseModel):
+    """编程题配置"""
+
+    id: Optional[str] = Field(
+        default=None,
+        description="题目配置ID(create_code_question会自动生成更新id,更新题目时必须传递)",
+    )
+    answer_item_id: Optional[str] = Field(
+        default=None,
+        description="题目答案项ID(create_code_question会自动生成更新id,更新题目时必须传递)",
+    )
+
+    max_memory: int = Field(default=5000, description="内存限制(kb)", gt=0)
+    max_time: int = Field(default=500, description="时间限制(ms)", gt=0)
+
+    debug: int = Field(
+        default=2, description="是否允许试运行(1是关闭,2是开启)", ge=1, le=2
+    )
+    debug_count: int = Field(default=9999, description="试运行次数", ge=0, le=9999)
+
+    runcase: int = Field(
+        default=2, description="是否允许运行测试用例(1是关闭,2是开启)", ge=1, le=2
+    )
+    runcase_count: int = Field(
+        default=100, description="运行测试用例次数", ge=0, le=100
     )
 
     language: List[ProgrammingLanguage] = Field(
@@ -518,6 +734,12 @@ class ProgramSetting(BaseModel):
     code_answer: str = Field(
         default=None,
         description="参考答案代码,必须要足够详细的注释(通过\n换行)",
+    )
+
+    in_cases: List[dict[str, str]] = Field(
+        default=None,
+        description="测试用例的输入列表[{'in': '输入内容'}]",
+        min_length=1,
     )
 
 
@@ -540,7 +762,7 @@ class CodeQuestion(BaseModel):
         description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)",
         min_length=1,
     )
-    program_setting: ProgramSetting = Field(description="编程题配置")
+    program_setting: ProgramSettingAllNeed = Field(description="编程题配置")
     score: int = Field(default=2, description="题目分数", gt=0)
     required: Optional[RequiredType] = Field(
         default=RequiredType.YES, description="是否必答(1=否, 2=是)"

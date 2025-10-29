@@ -44,7 +44,7 @@ def query_teacher_groups() -> dict:
             return ResponseUtil.success(courses, "查询成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("查询教师的课程组失败", e)
@@ -79,7 +79,7 @@ def query_attendance_records(
 
             if not response.get("success"):
                 return ResponseUtil.error(
-                    response.get("msg") or response.get("message", "未知错误")
+                    response.get("msg") or response.get("message") or "未知错误"
                 )
 
             keep_keys = [
@@ -134,7 +134,7 @@ def query_group_classes(
             return ResponseUtil.success(class_list, "班级列表查询成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("查询课程组的班级列表失败", e)
@@ -178,7 +178,7 @@ def query_single_attendance_students(
             return ResponseUtil.success(students, "学生列表查询成功")
         else:
             return ResponseUtil.error(
-                response.get("msg") or response.get("message", "未知错误")
+                response.get("msg") or response.get("message") or "未知错误"
             )
     except Exception as e:
         return ResponseUtil.error("查询单次签到的学生列表失败", e)
