@@ -1,8 +1,4 @@
-"""
-题目查询MCP工具
-
-此模块为在线测试系统中查询试卷和题目提供MCP工具.
-"""
+"""题目查询 MCP 工具"""
 
 import requests
 from typing import Annotated
@@ -17,22 +13,20 @@ from ...types.types import (
     RequiredType,
 )
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
 def query_paper(
     group_id: Annotated[str, Field(description="组id")],
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
-    need_parse: Annotated[
-        bool, Field(description="是否解析题目内容,默认不解析")
-    ] = False,
+    paper_id: Annotated[str, Field(description="试卷ID")],
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """查询指定卷子的所有题目信息"""
     try:
         response = requests.get(
             f"{MAIN_URL}/survey/queryPaperEditBuffer",
-            headers=create_headers(),
+            headers=headers(),
             params={"paper_id": str(paper_id), "group_id": str(group_id)},
         ).json()
         if response.get("success"):
@@ -98,7 +92,7 @@ def parse_text(text):
 
 
 def parse_answer_items(answer_items, question_type, need_parse=True):
-    """解析答案项，根据题目类型返回不同格式的答案"""
+    """解析答案项,根据题目类型返回不同格式的答案"""
     parsers = {
         QuestionType.MULTIPLE_CHOICE.value: lambda item: {
             "answer_item_id": item["id"],

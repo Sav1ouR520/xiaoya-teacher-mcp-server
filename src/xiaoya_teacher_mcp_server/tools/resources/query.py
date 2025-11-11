@@ -1,8 +1,4 @@
-"""
-资源查询MCP工具
-
-此模块为查询课程管理系统中的教育资源提供MCP工具.
-"""
+"""资源查询 MCP 工具"""
 
 import requests
 import tempfile
@@ -14,7 +10,7 @@ from urllib.parse import quote
 
 from ...types.types import ResourceType
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, DOWNLOAD_URL, create_headers, MCP
+from ...config import MAIN_URL, DOWNLOAD_URL, headers, MCP
 
 
 @MCP.tool()
@@ -32,7 +28,7 @@ def query_course_resources(
     try:
         response = requests.get(
             f"{MAIN_URL}/resource/queryCourseResources/v2",
-            headers=create_headers(),
+            headers=headers(),
             params={"group_id": str(group_id)},
         ).json()
 
@@ -134,7 +130,7 @@ def download_file(
     """获取下载链接并自动下载文件内容,保存到本地磁盘"""
     try:
         url = f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}"
-        response = requests.get(url, headers=create_headers()).json()
+        response = requests.get(url, headers=headers()).json()
         if not response.get("success"):
             return ResponseUtil.error(
                 f"获取文件下载链接失败 (文件名: {filename}): {response.get('msg', {}).get('message', '未知错误')}"
@@ -186,7 +182,7 @@ def read_file_by_markdown(
             )
         elif paper_id and filename:
             url = f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}"
-            response = requests.get(url, headers=create_headers()).json()
+            response = requests.get(url, headers=headers()).json()
             if not response.get("success"):
                 return ResponseUtil.error(f"获取文件下载链接失败,文件名:{filename}")
 

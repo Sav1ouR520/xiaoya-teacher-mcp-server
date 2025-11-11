@@ -1,19 +1,15 @@
-"""
-资源删除MCP工具
-
-此模块为从课程管理系统中删除教育资源提供MCP工具.
-"""
+"""资源删除 MCP 工具"""
 
 import requests
 from typing import Annotated
 from pydantic import Field
 
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 from ...utils.response import ResponseUtil
 
 
 @MCP.tool()
-def delete_resource(
+def delete_course_resource(
     group_id: Annotated[str, Field(description="课程组id")],
     node_id: Annotated[str, Field(description="要删除的资源节点id")],
 ) -> dict:
@@ -22,7 +18,7 @@ def delete_resource(
         response = requests.post(
             f"{MAIN_URL}/resource/delResource",
             json={"node_id": str(node_id), "group_id": str(group_id)},
-            headers=create_headers(),
+            headers=headers(),
         ).json()
 
         if response.get("success"):

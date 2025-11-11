@@ -1,21 +1,16 @@
-"""
-资源创建MCP工具
-
-此模块为课程管理系统中创建教育资源提供MCP工具.
-支持创建文件夹、笔记、思维导图、作业、教学设计和上传文件.
-"""
+"""资源创建 MCP 工具"""
 
 import requests
 from typing import Annotated
 from pydantic import Field
 
 from ...types.types import ResourceType
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 from ...utils.response import ResponseUtil
 
 
 @MCP.tool()
-def create_resource(
+def create_course_resource(
     group_id: Annotated[str, Field(description="课程组id")],
     type_val: Annotated[
         ResourceType,
@@ -36,7 +31,7 @@ def create_resource(
                 "group_id": str(group_id),
                 "name": name,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             resource_data = {

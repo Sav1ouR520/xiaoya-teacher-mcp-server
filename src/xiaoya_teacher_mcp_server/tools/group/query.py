@@ -1,8 +1,4 @@
-"""
-课程组查询MCP工具
-
-此模块为课程管理系统中查询教学课程组、课程签到情况、课程班级信息等提供MCP工具.
-"""
+"""课程组查询 MCP 工具"""
 
 import requests
 from typing import Annotated
@@ -10,7 +6,7 @@ from pydantic import Field
 
 from ...types.types import AttendanceStatus
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
@@ -18,7 +14,7 @@ def query_teacher_groups() -> dict:
     """查询教师的课程组"""
     try:
         response = requests.get(
-            f"{MAIN_URL}/group/teacher/groups", headers=create_headers()
+            f"{MAIN_URL}/group/teacher/groups", headers=headers()
         ).json()
 
         if response.get("success"):
@@ -69,7 +65,7 @@ def query_attendance_records(
         while True:
             response = requests.post(
                 f"{MAIN_URL}/register/group",
-                headers=create_headers(),
+                headers=headers(),
                 json={
                     "group_id": str(group_id),
                     "page": current_page,
@@ -120,7 +116,7 @@ def query_group_classes(
     """查询课程组的班级列表"""
     try:
         response = requests.get(
-            f"{MAIN_URL}/group/class/list/{group_id}", headers=create_headers()
+            f"{MAIN_URL}/group/class/list/{group_id}", headers=headers()
         ).json()
         if response.get("success"):
             class_list = [
@@ -153,7 +149,7 @@ def query_single_attendance_students(
     try:
         response = requests.post(
             f"{MAIN_URL}/register/one/student",
-            headers=create_headers(),
+            headers=headers(),
             json={
                 "register_id": str(register_id),
                 "group_id": str(group_id),

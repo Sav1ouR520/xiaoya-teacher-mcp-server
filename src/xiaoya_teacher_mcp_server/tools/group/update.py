@@ -4,7 +4,7 @@ from pydantic import Field
 
 from ...types.types import AttendanceStatus, AttendanceUser
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers
+from ...config import MAIN_URL, headers
 
 
 # @MCP.tool()
@@ -24,7 +24,7 @@ def change_attendance_status(
             try:
                 resp = requests.post(
                     f"{MAIN_URL}/status/change",
-                    headers=create_headers(),
+                    headers=headers(),
                     json={
                         "group_id": str(group_id),
                         "register_user_id": str(item["register_user_id"]),

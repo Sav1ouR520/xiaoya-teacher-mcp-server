@@ -1,8 +1,8 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.0.9-blue)
+![版本](https://img.shields.io/badge/版本-1.1.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
-![MCP](https://img.shields.io/badge/MCP-1.14.0+-purple)
+![MCP](https://img.shields.io/badge/MCP-1.19.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
 
 专为教师设计的小雅智能教学平台的教育管理MCP服务器, 通过MCP协议与AI助手集成, 提供完整的教育资源管理、题目创建、班级管理、签到统计和任务测验等功能. 让AI助手成为您教学工作的得力助手!

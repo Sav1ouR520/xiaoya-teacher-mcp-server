@@ -1,20 +1,16 @@
-"""
-题目删除MCP工具
-
-此模块为在线测试系统中从试卷删除题目提供MCP工具.
-"""
+"""题目删除 MCP 工具"""
 
 import requests
 from typing import Annotated
 from pydantic import Field
 
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
 def delete_questions(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_ids: Annotated[list[str], Field(description="要删除的题目id列表")],
 ) -> dict:
     """从试卷中批量删除题目"""
@@ -25,7 +21,7 @@ def delete_questions(
             response = requests.post(
                 url,
                 json={"paper_id": str(paper_id), "question_id": str(question_id)},
-                headers=create_headers(),
+                headers=headers(),
             )
 
             response = response.json()
@@ -57,7 +53,7 @@ def delete_answer_item(
                 "question_id": str(question_id),
                 "answer_item_id": str(answer_item_id),
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             return ResponseUtil.success(None, "选项删除成功")

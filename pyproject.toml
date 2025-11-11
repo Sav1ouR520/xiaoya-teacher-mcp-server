@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xiaoya-teacher-mcp-server"
-version = "1.0.10"
+version = "1.1.0"
 description = "小雅教育管理MCP服务器 - 专为教师设计,提供课程资源管理和试题创建工具"
 authors = [{ name = "Sav1ouR520", email = "3300233150@qq.com" }]
 license = { text = "MIT" }
@@ -20,9 +20,15 @@ dependencies = [
 Homepage = "https://github.com/Sav1ouR520/xiaoya-teacher-mcp-server"
 Repository = "https://github.com/Sav1ouR520/xiaoya-teacher-mcp-server"
 
-
 [project.scripts]
 xiaoya-teacher-mcp-server = "xiaoya_teacher_mcp_server.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["xiaoya_teacher_mcp_server"]
+packages = ["src/xiaoya_teacher_mcp_server"]
+
+[dependency-groups]
+dev = ["pytest>=8.4.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

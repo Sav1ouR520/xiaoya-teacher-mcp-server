@@ -34,11 +34,19 @@ def generate_random_state(length: int = 6) -> str:
     return "".join(random.choice(characters) for _ in range(length))
 
 
-def create_headers() -> dict:
-    """创建HTTP请求头,支持两种认证方式"""
+def headers() -> dict:
+    """创建HTTP请求头,仅使用已初始化的认证信息"""
     global _cached_token
     if _cached_token:
         return HEADERS | {"Authorization": _cached_token}
+    raise ValueError("认证未初始化")
+
+
+def initialize_auth() -> None:
+    """在服务器启动阶段初始化认证信息"""
+    global _cached_token
+    if _cached_token:
+        return
 
     token = os.getenv("XIAOYA_AUTH_TOKEN")
     if token:
@@ -57,10 +65,10 @@ def create_headers() -> dict:
                 "2. XIAOYA_ACCOUNT 和 XIAOYA_PASSWORD"
             )
 
-    if not _cached_token:
-        raise ValueError("认证失败: token无效或登录失败")
-
-    return HEADERS | {"Authorization": _cached_token}
+    if _cached_token:
+        print(f"认证初始化成功: {_cached_token}")
+    else:
+        raise ValueError("认证初始化失败: 未获取到有效的认证令牌")
 
 
 def login(account: str, password: str) -> Optional[str]:

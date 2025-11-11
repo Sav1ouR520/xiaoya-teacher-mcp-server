@@ -1,9 +1,4 @@
-"""
-题目创建MCP工具
-
-此模块为在线测试系统中创建各种类型的题目提供MCP工具.
-支持单选题、多选题、填空题、判断题、编程题.
-"""
+"""题目创建 MCP 工具"""
 
 import requests
 from typing import Annotated, List, Optional
@@ -21,10 +16,12 @@ from ..questions.update import (
 from ..questions.delete import delete_questions
 from ...types.types import (
     AttachmentQuestion,
+    AttachmentQuestionData,
     ChoiceQuestion,
     CodeQuestion,
     FillBlankQuestionData,
     LineText,
+    MultipleChoiceQuestion,
     MultipleChoiceQuestionData,
     QuestionType,
     ShortAnswerQuestion,
@@ -36,13 +33,15 @@ from ...types.types import (
 )
 from typing import Union
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
 def create_single_choice_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[ChoiceQuestion, Field(description="单选题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建单选题"""
     question_id = None
@@ -59,6 +58,7 @@ def create_single_choice_question(
             question.title,
             question.description,
             question.required,
+            need_parse=need_parse,
         )
 
         for _ in range(len(answer_items), len(question.options)):
@@ -76,6 +76,8 @@ def create_single_choice_question(
                     result.get("msg") or result.get("message") or "未知错误"
                 )
         question_data["options"] = result["data"]
+        if not need_detail:
+            return ResponseUtil.success(None, "单选题创建成功")
         return ResponseUtil.success(question_data, "单选题创建成功")
     except Exception as e:
         if question_id:
@@ -85,8 +87,10 @@ def create_single_choice_question(
 
 @MCP.tool()
 def create_multiple_choice_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
-    question: Annotated[ChoiceQuestion, Field(description="多选题信息")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
+    question: Annotated[MultipleChoiceQuestion, Field(description="多选题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建多选题"""
     question_id = None
@@ -103,6 +107,7 @@ def create_multiple_choice_question(
             question.title,
             question.description,
             question.required,
+            need_parse=need_parse,
         )
 
         for _ in range(len(answer_items), len(question.options)):
@@ -120,6 +125,8 @@ def create_multiple_choice_question(
                     result.get("msg") or result.get("message") or "未知错误"
                 )
         question_data["options"] = result["data"]
+        if not need_detail:
+            return ResponseUtil.success(None, "多选题创建成功")
         return ResponseUtil.success(question_data, "多选题创建成功")
     except Exception as e:
         if question_id:
@@ -129,8 +136,10 @@ def create_multiple_choice_question(
 
 @MCP.tool()
 def create_fill_blank_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[FillBlankQuestion, Field(description="填空题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建填空题"""
     question_id = None
@@ -158,6 +167,7 @@ def create_fill_blank_question(
             is_split_answer=question.is_split_answer,
             automatic_stat=question.automatic_stat,
             automatic_type=question.automatic_type,
+            need_parse=need_parse,
         )
 
         for item, option in zip(answer_items, question.options):
@@ -167,6 +177,8 @@ def create_fill_blank_question(
                     result.get("msg") or result.get("message") or "未知错误"
                 )
         question_data["options"] = result["data"]
+        if not need_detail:
+            return ResponseUtil.success(None, "填空题创建成功")
         return ResponseUtil.success(question_data, "填空题创建成功")
     except Exception as e:
         if question_id:
@@ -176,8 +188,10 @@ def create_fill_blank_question(
 
 @MCP.tool()
 def create_true_false_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[TrueFalseQuestion, Field(description="判断题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建判断题"""
     question_id = None
@@ -194,6 +208,7 @@ def create_true_false_question(
             question.title,
             question.description,
             question.required,
+            need_parse=need_parse,
         )
 
         answer_id = next(
@@ -210,6 +225,8 @@ def create_true_false_question(
         if not result["success"]:
             raise ValueError(result.get("msg") or result.get("message") or "未知错误")
         question_data["options"] = result["data"]
+        if not need_detail:
+            return ResponseUtil.success(None, "判断题创建成功")
         return ResponseUtil.success(question_data, "判断题创建成功")
     except Exception as e:
         if question_id:
@@ -219,8 +236,10 @@ def create_true_false_question(
 
 @MCP.tool()
 def create_short_answer_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[ShortAnswerQuestion, Field(description="简答题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建简答题"""
     question_id = None
@@ -237,6 +256,7 @@ def create_short_answer_question(
             question.title,
             question.description,
             question.required,
+            need_parse=need_parse,
         )
 
         result["options"] = update_short_answer_answer(
@@ -244,7 +264,8 @@ def create_short_answer_question(
             answer_item_id=answer_items[0]["id"],
             answer=question.answer,
         )
-
+        if not need_detail:
+            return ResponseUtil.success(None, "简答题创建成功")
         return ResponseUtil.success(result, "简答题创建成功")
     except Exception as e:
         if question_id:
@@ -254,11 +275,10 @@ def create_short_answer_question(
 
 @MCP.tool()
 def create_attachment_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[AttachmentQuestion, Field(description="附件题信息")],
-    insert_question_id: Annotated[
-        Optional[str], Field(description="插入指定题目ID后面")
-    ] = None,
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建附件题"""
     question_id = None
@@ -267,7 +287,7 @@ def create_attachment_question(
             paper_id,
             QuestionType.ATTACHMENT,
             question.score,
-            insert_question_id,
+            question.insert_question_id,
         )[0]
 
         result = _update_question_base(
@@ -275,8 +295,10 @@ def create_attachment_question(
             question.title,
             question.description,
             question.required,
+            need_parse=need_parse,
         )
-
+        if not need_detail:
+            return ResponseUtil.success(None, "附件题创建成功")
         return ResponseUtil.success(result, "附件题创建成功")
     except Exception as e:
         if question_id:
@@ -286,8 +308,10 @@ def create_attachment_question(
 
 @MCP.tool()
 def create_code_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question: Annotated[CodeQuestion, Field(description="编程题信息")],
+    need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """创建编程题"""
     question_id = None
@@ -311,7 +335,10 @@ def create_code_question(
             question.description,
             question.required,
             program_setting=question.program_setting,
+            need_parse=need_parse,
         )
+        if not need_detail:
+            return ResponseUtil.success(None, "编程题创建并配置编程设置和测试用例成功")
         return ResponseUtil.success(result, "编程题创建并配置编程设置和测试用例成功")
     except Exception as e:
         if question_id:
@@ -321,7 +348,7 @@ def create_code_question(
 
 @MCP.tool()
 def batch_create_questions(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     questions: Annotated[
         List[
             Union[
@@ -330,38 +357,38 @@ def batch_create_questions(
                 FillBlankQuestion,
                 AttachmentQuestion,
                 ShortAnswerQuestion,
+                CodeQuestion,
             ]
         ],
         Field(description="题目列表", min_length=1),
     ],
     need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
-    """批量创建题目(非官方接口),不稳定但功能更强大[支持单选、多选、填空、判断、附件、简答题]"""
+    """批量创建题目(非官方接口),不稳定但功能更强大[支持单选、多选、填空、判断、附件、简答题、编程题]"""
     success_count, failed_count, results = 0, 0, {"details": [], "questions": []}
 
     question_handlers = {
-        (ChoiceQuestion, QuestionType.SINGLE_CHOICE): create_single_choice_question,
-        (ChoiceQuestion, QuestionType.MULTIPLE_CHOICE): create_multiple_choice_question,
-        TrueFalseQuestion: create_true_false_question,
-        FillBlankQuestion: create_fill_blank_question,
-        ShortAnswerQuestion: create_short_answer_question,
-        AttachmentQuestion: create_attachment_question,
+        QuestionType.SINGLE_CHOICE: create_single_choice_question,
+        QuestionType.MULTIPLE_CHOICE: create_multiple_choice_question,
+        QuestionType.TRUE_FALSE: create_true_false_question,
+        QuestionType.FILL_BLANK: create_fill_blank_question,
+        QuestionType.SHORT_ANSWER: create_short_answer_question,
+        QuestionType.ATTACHMENT: create_attachment_question,
+        QuestionType.CODE: create_code_question,
     }
 
     for i, question in enumerate(questions, 1):
         try:
-            handler = None
-            if isinstance(question, ChoiceQuestion):
-                handler = question_handlers.get((ChoiceQuestion, question.type))
-            else:
-                handler = question_handlers.get(type(question))
-
+            handler = question_handlers.get(question.type)
             if handler is None:
                 failed_count += 1
                 results["details"].append(f"第{i}题: 创建失败 - 不支持的题目类型")
                 continue
 
-            result = handler(paper_id, question)
+            result = handler(
+                paper_id, question, need_detail=need_detail, need_parse=need_parse
+            )
 
             if result["success"]:
                 success_count += 1
@@ -387,7 +414,7 @@ def batch_create_questions(
 
 @MCP.tool()
 def office_create_questions(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     questions: Annotated[
         List[
             Union[
@@ -396,11 +423,13 @@ def office_create_questions(
                 FillBlankQuestionData,
                 TrueFalseQuestionData,
                 ShortAnswerQuestionData,
+                AttachmentQuestionData,
             ]
         ],
         Field(description="题目列表", min_length=1),
     ],
     need_detail: Annotated[bool, Field(description="是否返回详细题目信息")] = False,
+    need_parse: Annotated[bool, Field(description="是否返回原始题目内容")] = False,
 ) -> dict:
     """批量导入题目(官方接口),稳定性强[仅支持单选、多选、填空、判断、简答、附件题]"""
     url = f"{MAIN_URL}/survey/question/import"
@@ -421,7 +450,7 @@ def office_create_questions(
                 "paper_id": str(paper_id),
                 "questions": [question.model_dump() for question in questions],
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             if not need_detail:
@@ -430,7 +459,7 @@ def office_create_questions(
                     f"[批量导入完成][共{len(response['data'])}题]",
                 )
             return ResponseUtil.success(
-                [parse_question(question) for question in response["data"]],
+                [parse_question(question, need_parse) for question in response["data"]],
                 f"[批量导入完成][共{len(response['data'])}题]",
             )
         else:
@@ -443,7 +472,7 @@ def office_create_questions(
 
 @MCP.tool()
 def create_question(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_type: Annotated[int, Field(description="题目类型编号")],
     score: Annotated[int, Field(description="题目分数", gt=0)],
     insert_question_id: Annotated[
@@ -463,7 +492,7 @@ def create_question(
         response = requests.post(
             f"{MAIN_URL}/survey/addQuestion",
             json=payload,
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             return ResponseUtil.success(
@@ -480,7 +509,7 @@ def create_question(
 
 @MCP.tool()
 def create_blank_answer_items(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_id: Annotated[str, Field(description="题目id")],
     count: Annotated[int, Field(description="空白答案项数量", gt=0)],
 ) -> dict:
@@ -494,7 +523,7 @@ def create_blank_answer_items(
                 "question_id": str(question_id),
                 "count": count,
             },
-            headers=create_headers(),
+            headers=headers(),
         )
         response = response.json()
         if response.get("success"):
@@ -511,7 +540,7 @@ def create_blank_answer_items(
 
 @MCP.tool()
 def create_answer_item(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_id: Annotated[str, Field(description="题目id")],
 ) -> dict:
     """创建答案项"""
@@ -520,7 +549,7 @@ def create_answer_item(
         response = requests.post(
             f"{MAIN_URL}/survey/createAnswerItem",
             json={"paper_id": str(paper_id), "question_id": str(question_id)},
-            headers=create_headers(),
+            headers=headers(),
         ).json()["data"]
         return ResponseUtil.success(response, "答案项创建成功")
     except Exception as e:

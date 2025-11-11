@@ -1,9 +1,4 @@
-"""
-响应工具模块
-
-此模块为所有MCP工具提供统一的响应格式.
-所有API响应都遵循标准格式:{message, timestamp, data, success}
-"""
+"""统一响应格式工具"""
 
 from datetime import datetime, timedelta
 from typing import Any, Dict

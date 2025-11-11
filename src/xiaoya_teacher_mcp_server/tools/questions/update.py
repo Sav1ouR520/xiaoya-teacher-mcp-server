@@ -1,8 +1,4 @@
-"""
-题目更新MCP工具
-
-此模块为在线测试系统中更新题目及其选项提供MCP工具.
-"""
+"""题目更新 MCP 工具"""
 
 import json
 import requests
@@ -13,7 +9,7 @@ from pydantic import Field
 
 from ...tools.questions.query import parse_question, parse_text
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 from ...types.types import (
     AnswerChecked,
     AutoScoreType,
@@ -23,6 +19,10 @@ from ...types.types import (
     RequiredType,
     AutoStatType,
     RandomizationType,
+    QUESTION_RICH_TEXT_DESC,
+    REFERENCE_RICH_TEXT_DESC,
+    ANSWER_EXPLANATION_DESC,
+    IN_CASES_DESC,
 )
 
 
@@ -31,23 +31,12 @@ def update_question(
     question_id: Annotated[str, Field(description="题目id")],
     title: Annotated[
         Optional[list[LineText]],
-        Field(
-            description="题目描述(支持富文本，多行):\n"
-            "- 多行:列表形式\n"
-            "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
-            "- 题目描述格式例下(一行版本,可以多行,必须时换行):\n"
-            "  {\n"
-            "    'text': '题目内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
-            "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
-            "  }\n"
-        ),
+        Field(description=QUESTION_RICH_TEXT_DESC),
     ] = None,
     score: Annotated[Optional[int], Field(description="题目分值", ge=0)] = None,
     description: Annotated[
         Optional[str],
-        Field(
-            description="答案解析(答案请提供足够详细解析,避免过于简短或过长,注意不要搞错成题目描述)"
-        ),
+        Field(description=ANSWER_EXPLANATION_DESC),
     ] = None,
     required: Annotated[
         Optional[RequiredType], Field(description="是否必答 1=否, 2=是")
@@ -62,12 +51,7 @@ def update_question(
     automatic_type: Annotated[
         Optional[AutoScoreType],
         Field(
-            description="""填空题自动评分类型(仅填空题)[必须严格根据题目情况选择]:
-                        - 1=精确匹配+有序排序: 答案必须完全匹配且顺序一致,适用于每个空只有一个正确答案的情况;
-                        - 2=部分匹配+有序排序: 答案部分匹配且顺序一致,适用于每个空有多个正确答案的情况;
-                        - 11=精确匹配+无序排序: 答案必须完全匹配但顺序不限,适用于每个空只有一个正确答案且答案顺序不重要的情况;
-                        - 12=部分匹配+无序排序: 答案部分匹配且顺序不限,适用于每个空有多个正确答案且答案顺序不重要的情况;
-                    """.replace("\n", " ").strip(),
+            description="填空题自动评分: 1精确/有序, 2部分/有序, 11精确/无序, 12部分/无序"
         ),
     ] = None,
     program_setting: Annotated[
@@ -75,7 +59,7 @@ def update_question(
     ] = None,
     need_parse: Annotated[bool, Field(description="是否返回解析题目内容")] = False,
 ) -> dict:
-    """[不限制题型]更新题目设置(注意:请根据题型谨慎操作,给没有指定配置的题型传入错误设置会导致整个卷子无法使用,只能删除整张卷子或删除错误设置的题目,使卷子恢复正常)"""
+    """更新任意题目的通用配置"""
     try:
         url = f"{MAIN_URL}/survey/updateQuestion"
         payload = {"question_id": str(question_id)}
@@ -95,16 +79,16 @@ def update_question(
         if automatic_type is not None:
             payload["automatic_type"] = automatic_type
         if program_setting is not None:
-            if program_setting.id is None:
-                raise ValueError("编程题创建/更新失败, 需要传递题目设置ID")
-            payload["program_setting"] = program_setting.model_dump()
+            payload["program_setting"] = program_setting.model_dump(
+                exclude_none=True, exclude_defaults=True, exclude_unset=True
+            )
             payload["program_setting"]["example_language"] = (
                 program_setting.answer_language
             )
             payload["program_setting"]["example_code"] = program_setting.code_answer
             del payload["program_setting"]["in_cases"]
             del payload["program_setting"]["answer_item_id"]
-        response = requests.post(url, json=payload, headers=create_headers()).json()
+        response = requests.post(url, json=payload, headers=headers()).json()
         if not response.get("success"):
             return ResponseUtil.error(
                 response.get("msg") or response.get("message") or "未知错误"
@@ -149,7 +133,7 @@ def update_question_options(
         response = requests.post(
             url=f"{MAIN_URL}/survey/updateAnswerItem",
             json=payload,
-            headers=create_headers(),
+            headers=headers(),
         ).json()
 
         if response.get("success"):
@@ -185,7 +169,7 @@ def update_fill_blank_answer(
                 "answer_item_id": str(answer_item_id),
                 "answer": answer,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             simplified_data = [
@@ -218,7 +202,7 @@ def update_true_false_answer(
                 "answer_item_id": str(answer_item_id),
                 "answer_checked": 2,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             simplified_data = [
@@ -243,16 +227,7 @@ def update_short_answer_answer(
     answer_item_id: Annotated[str, Field(description="答案项id")],
     answer: Annotated[
         list[LineText],
-        Field(
-            description="参考答案(支持富文本，多行):\n"
-            "- 多行:列表形式\n"
-            "- 富文本样式:BOLD(粗体)、ITALIC(斜体)、UNDERLINE(下划线)、CODE(代码)\n"
-            "- 参考答案格式例下(一行版本,可以多行,必须时换行):\n"
-            "  {\n"
-            "    'text': '参考答案内容', 'line_type': 'unstyled'(或 unordered-list-item, ordered-list-item, code-block), \n"
-            "    'inlineStyleRanges': [ {'offset': 0, 'length': 4, 'style': 'BOLD'} ]\n"
-            "  }\n"
-        ),
+        Field(description=REFERENCE_RICH_TEXT_DESC),
     ],
 ) -> dict:
     """[仅限简答题]更新简答题参考答案"""
@@ -264,7 +239,7 @@ def update_short_answer_answer(
                 "answer_item_id": str(answer_item_id),
                 "answer": word_text(answer),
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             simplified_data = [
@@ -288,10 +263,10 @@ def update_code_test_cases(
     code_answer: Annotated[str, Field(description="答案代码[即将运行的代码]")],
     in_cases: Annotated[
         List[dict[str, str]],
-        Field(description="测试用例的输入列表[{'in': '输入内容'}]", min_length=1),
+        Field(description=IN_CASES_DESC, min_length=1),
     ],
 ) -> dict:
-    """[仅限编程题]更新编程题答案代码和测试用例,运行答案代码,自动生成测试用例(注意:会覆盖原有用例)"""
+    """更新编程题答案代码和测试用例(会覆盖原用例)"""
     try:
         result = update_question(
             question_id=question_id,
@@ -315,7 +290,7 @@ def update_code_test_cases(
 
 @MCP.tool()
 def update_paper_randomization(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_shuffle: Annotated[
         RandomizationType, Field(description="是否启用题目随机化,1为关闭,2为开启")
     ] = RandomizationType.DISABLED,
@@ -336,7 +311,7 @@ def update_paper_randomization(
                 "random": question_shuffle,
                 "question_score_type": question_score_type,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
 
         if response.get("success"):
@@ -364,7 +339,7 @@ def move_answer_item(
                 "question_id": str(question_id),
                 "answer_item_ids": answer_item_ids,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             return ResponseUtil.success(None, "题目选项顺序调整成功")
@@ -378,7 +353,7 @@ def move_answer_item(
 
 @MCP.tool()
 def update_paper_question_order(
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     question_ids: Annotated[
         List[str], Field(description="按新顺序排列的题目id列表", min_length=1)
     ],
@@ -391,7 +366,7 @@ def update_paper_question_order(
                 "paper_id": str(paper_id),
                 "question_ids": [str(qid) for qid in question_ids],
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         if response.get("success"):
             filtered_data = {
@@ -432,7 +407,7 @@ def _update_code_cases(
             "code": code,
             "input": json.dumps(in_cases),
         },
-        headers=create_headers(),
+        headers=headers(),
     ).json()
 
     if not case_result.get("success"):
@@ -454,7 +429,7 @@ def _update_code_cases(
             "answer_item_id": str(answer_item_id),
             "answer": json.dumps(formatted_cases),
         },
-        headers=create_headers(),
+        headers=headers(),
     ).json()
 
     if not response.get("success"):

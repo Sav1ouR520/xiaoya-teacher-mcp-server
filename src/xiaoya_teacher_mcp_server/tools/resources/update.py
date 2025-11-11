@@ -1,9 +1,4 @@
-"""
-资源更新MCP工具
-
-此模块为课程管理系统中更新教育资源提供MCP工具.
-支持更新资源名称和在文件夹间移动资源.
-"""
+"""资源更新 MCP 工具"""
 
 import json
 import requests
@@ -11,7 +6,7 @@ from typing import Annotated, List
 from pydantic import Field
 
 from ...types.types import ResourceType, DownloadType, VisibilityType
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 from ...utils.response import ResponseUtil
 
 
@@ -30,7 +25,7 @@ def update_resource_name(
                 "group_id": str(group_id),
                 "name": new_name,
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
 
         if response.get("success"):
@@ -78,7 +73,7 @@ def move_resource(
                 "from_parent_id": str(from_parent_id),
                 "parent_id": str(parent_id),
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
         resource_data = []
         if response.get("success"):
@@ -129,7 +124,7 @@ def batch_update_resource_download(
                     "node_id": str(node_id),
                     "download": int(download),
                 },
-                headers=create_headers(),
+                headers=headers(),
             ).json()
             if response.get("success"):
                 success_ids.append(node_id)
@@ -174,7 +169,7 @@ def batch_update_resource_visibility(
                     "activity_node_ids": str(nid),
                     "pub": pub,
                 },
-                headers=create_headers(),
+                headers=headers(),
             ).json()
             if response.get("success"):
                 success_ids.append(nid)
@@ -220,7 +215,7 @@ def update_resource_sort(
                     ensure_ascii=False,
                 ),
             },
-            headers=create_headers(),
+            headers=headers(),
         ).json()
 
         if response.get("success"):

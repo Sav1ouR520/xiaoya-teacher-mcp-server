@@ -12,7 +12,7 @@ from ...tools.questions.query import parse_answer_items, parse_text
 from ..resources.query import query_course_resources
 from ...types.types import AnswerStatus, QuestionType
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, create_headers, MCP
+from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
@@ -30,14 +30,16 @@ def query_group_tasks(
     flattened_tasks = [
         {
             "name": task_folder["name"],
-            "paper_id": task_folder["quote_id"],
+            "paper_id": task_folder["paper_id"],
             "start_time": link_task["start_time"],
             "end_time": link_task["end_time"],
             "publish_id": link_task["publish_id"],
         }
         for task_folder in tasks
+        if "link_tasks" in task_folder and task_folder["link_tasks"]
         for link_task in task_folder["link_tasks"]
     ]
+    flattened_tasks.sort(key=lambda x: x["publish_id"])
 
     return ResponseUtil.success(
         flattened_tasks, f"课程测试/考试/任务查询成功,共{len(flattened_tasks)}项"
@@ -47,14 +49,14 @@ def query_group_tasks(
 @MCP.tool()
 def query_test_result(
     group_id: Annotated[str, Field(description="课程组id")],
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     publish_id: Annotated[str, Field(description="发布id")],
 ) -> dict:
     """查询学生的测试/考试/任务的答题情况(包含mark_mode_id)"""
     try:
         response = requests.get(
             f"{MAIN_URL}/survey/course/queryStuAnswerList/v2",
-            headers=create_headers(),
+            headers=headers(),
             params={
                 "group_id": str(group_id),
                 "paper_id": str(paper_id),
@@ -108,7 +110,7 @@ def query_test_result(
 @MCP.tool()
 def query_preview_student_paper(
     group_id: Annotated[str, Field(description="课程组id")],
-    paper_id: Annotated[str, Field(description="试卷paper_id")],
+    paper_id: Annotated[str, Field(description="试卷ID")],
     mark_mode_id: Annotated[str, Field(description="修改模式id")],
     publish_id: Annotated[str, Field(description="发布id")],
     record_id: Annotated[str, Field(description="答题记录id")],
@@ -117,7 +119,7 @@ def query_preview_student_paper(
     try:
         response = requests.get(
             f"{MAIN_URL}/survey/course/queryMarkRecord",
-            headers=create_headers(),
+            headers=headers(),
             params={
                 "group_id": str(group_id),
                 "paper_id": str(paper_id),
@@ -133,6 +135,8 @@ def query_preview_student_paper(
             }
             integrated_questions = []
             for q in response["data"]["questions"]:
+                ans = answer_map[q["id"]]
+                user_answer = ans.get("answer_items") or ans.get("answer", "")
                 data = {
                     "id": q["id"],
                     "title": parse_text(q["title"]),
@@ -140,17 +144,17 @@ def query_preview_student_paper(
                     "type": QuestionType.get(q["type"]),
                     "score": q["score"],
                     "user": {
-                        "answer": parse_text(answer_map[q["id"]]["answer_items"]),
-                        "score": answer_map[q["id"]]["score"],
+                        "answer": parse_text(user_answer),
+                        "score": ans["score"],
                     },
                 }
                 if len(q["answer_items"]) > 0:
                     data["options"] = parse_answer_items(q["answer_items"], q["type"])
                 if data["type"] == QuestionType.CODE.value:
                     data["program_setting"] = q["program_setting"]
-                    data["user"]["test_case_info"] = parse_text(
-                        answer_map[q["id"]]["info"]
-                    ).get("data", [])
+                    data["user"]["test_case_info"] = parse_text(ans["info"]).get(
+                        "data", []
+                    )
                 integrated_questions.append(data)
 
             return ResponseUtil.success(integrated_questions, "学生答题预览查询成功")
