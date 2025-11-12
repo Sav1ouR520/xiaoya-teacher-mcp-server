@@ -12,21 +12,50 @@ from xiaoya_teacher_mcp_server.types.types import ResourceType
 load_dotenv(find_dotenv())
 
 
+def _flatten_resources(resource_tree):
+    """递归扁平化资源树"""
+    result = []
+    for resource in resource_tree:
+        result.append(resource)
+        if "children" in resource and resource["children"]:
+            result.extend(_flatten_resources(resource["children"]))
+    return result
+
+
+def _find_root_resource(resource_tree):
+    """递归查找名为 'root' 的资源"""
+    for resource in resource_tree:
+        if resource.get("name") == "root":
+            return resource
+        if "children" in resource and resource["children"]:
+            found = _find_root_resource(resource["children"])
+            if found:
+                return found
+    return None
+
+
 def _get_group_and_root() -> tuple:
     """获取group_id和root资源id"""
     group_id = group_query.query_teacher_groups()["data"][0]["group_id"]
-    resources = resource_query.query_course_resources(group_id, "flat")["data"]
-    root = next((r for r in resources if r.get("name") == "root"), None)
+    summary_result = resource_query.query_course_resources_summary(group_id)
+    assert summary_result["success"], f"查询资源失败: {summary_result}"
+
+    root = _find_root_resource(summary_result["data"])
     assert root is not None, "找不到root资源"
-    return group_id, root["id"]
+
+    # 获取 root 资源的完整属性以获取 id
+    root_attr = resource_query.query_resource_attributes(group_id, root["id"])
+    assert root_attr["success"], f"查询root资源属性失败: {root_attr}"
+    return group_id, root_attr["data"]["id"]
 
 
 def test_query_resource():
     """测试查询课程资源列表"""
     group_id, _ = _get_group_and_root()
-    result = resource_query.query_course_resources(group_id, "flat")
+    result = resource_query.query_course_resources_summary(group_id)
     assert result["success"]
-    print(f"\n✓ 查询成功,共{len(result['data'])}个资源")
+    all_resources = _flatten_resources(result["data"])
+    print(f"\n✓ 查询成功,共{len(all_resources)}个资源")
 
 
 def test_create_update_and_delete():
@@ -49,18 +78,24 @@ def test_create_update_and_delete():
         print(f"\n1. ✓ 创建并更新资源名称成功: {resource_name} -> {new_name}")
 
         # 2. 验证更新生效
-        resources = resource_query.query_course_resources(group_id, "flat")["data"]
-        updated_item = next((r for r in resources if r["id"] == node_id), None)
-        assert updated_item and updated_item["name"] == new_name
+        summary_result = resource_query.query_course_resources_summary(group_id)
+        assert summary_result["success"]
+        all_resources = _flatten_resources(summary_result["data"])
+        updated_item = next((r for r in all_resources if r["id"] == node_id), None)
+        if updated_item:
+            # 获取完整属性以验证名称
+            attr_result = resource_query.query_resource_attributes(group_id, node_id)
+            assert attr_result["success"]
+            assert attr_result["data"]["name"] == new_name
         print("2. ✓ 验证更新生效")
 
         # 3. 删除资源
         deleted = resource_delete.delete_course_resource(group_id, node_id)
         assert deleted["success"]
-        resources_after = resource_query.query_course_resources(group_id, "flat")[
-            "data"
-        ]
-        assert not any(r.get("id") == node_id for r in resources_after)
+        summary_after = resource_query.query_course_resources_summary(group_id)
+        assert summary_after["success"]
+        all_resources_after = _flatten_resources(summary_after["data"])
+        assert not any(r.get("id") == node_id for r in all_resources_after)
         print("3. ✓ 删除资源成功")
     finally:
         try:
@@ -118,8 +153,17 @@ def test_move_and_sort():
         print("2. ✓ 更新排序成功")
 
         # 4. 验证排序
-        all_items = resource_query.query_course_resources(group_id, "flat")["data"]
-        dst_children = [r for r in all_items if r.get("parent_id") == dst_id]
+        summary_result = resource_query.query_course_resources_summary(group_id)
+        assert summary_result["success"]
+        all_items = _flatten_resources(summary_result["data"])
+        # 需要获取每个资源的完整属性以获取 parent_id 和 sort_position
+        dst_children = []
+        for item in all_items:
+            attr_result = resource_query.query_resource_attributes(group_id, item["id"])
+            if attr_result["success"]:
+                attr_data = attr_result["data"]
+                if attr_data.get("parent_id") == dst_id:
+                    dst_children.append(attr_data)
         ordered_ids = [
             r["id"]
             for r in sorted(dst_children, key=lambda x: x.get("sort_position", 0))

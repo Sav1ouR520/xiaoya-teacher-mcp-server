@@ -32,15 +32,34 @@ from xiaoya_teacher_mcp_server.types.types import (
 load_dotenv(find_dotenv())
 
 
+def _find_root_resource(resource_tree):
+    """递归查找名为 'root' 的资源"""
+    for resource in resource_tree:
+        if resource.get("name") == "root":
+            return resource
+        if "children" in resource and resource["children"]:
+            found = _find_root_resource(resource["children"])
+            if found:
+                return found
+    return None
+
+
 def _create_test_paper(test_name: str) -> tuple:
     group_id = group_query.query_teacher_groups()["data"][0]["group_id"]
-    resources = resource_query.query_course_resources(group_id, "flat")["data"]
-    root = next((r for r in resources if r.get("name") == "root"), None)
+    summary_result = resource_query.query_course_resources_summary(group_id)
+    assert summary_result["success"], f"查询资源失败: {summary_result}"
+
+    root = _find_root_resource(summary_result["data"])
     assert root is not None, "找不到root资源"
+
+    # 获取 root 资源的完整属性以获取 id
+    root_attr = resource_query.query_resource_attributes(group_id, root["id"])
+    assert root_attr["success"], f"查询root资源属性失败: {root_attr}"
+    root_id = root_attr["data"]["id"]
 
     resource_name = f"test_{test_name}_{uuid.uuid4().hex[:8]}"
     result = resource_create.create_course_resource(
-        group_id, ResourceType.ASSIGNMENT, root["id"], resource_name
+        group_id, ResourceType.ASSIGNMENT, root_id, resource_name
     )
     assert result["success"], f"创建测试试卷失败: {result}"
     return result["data"]["paper_id"], group_id, result["data"]["id"]
@@ -89,7 +108,7 @@ def test_create_and_query_paper():
             ),
             ShortAnswerQuestion(
                 title=[LineText(text="请简述Python的主要特点")],
-                description="主要特点：简洁易读、动态类型、丰富的库",
+                description="主要特点: 简洁易读、动态类型、丰富的库",
                 answer=[LineText(text="Python语法简洁,支持动态类型,拥有丰富的标准库")],
                 score=10,
             ),

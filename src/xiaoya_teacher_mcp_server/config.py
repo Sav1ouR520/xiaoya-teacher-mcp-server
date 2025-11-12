@@ -15,6 +15,10 @@ import requests
 # 全局缓存变量
 _cached_token: Optional[str] = None
 
+# 是否为初始化完成
+_is_initialized: bool = False
+
+
 # API基础配置
 MAIN_URL = "https://fzrjxy.ai-augmented.com/api/jx-iresource"
 DOWNLOAD_URL = "https://fzrjxy.ai-augmented.com/api/jx-oresource"
@@ -36,7 +40,10 @@ def generate_random_state(length: int = 6) -> str:
 
 def headers() -> dict:
     """创建HTTP请求头,仅使用已初始化的认证信息"""
-    global _cached_token
+    global _cached_token, _is_initialized
+    if not _is_initialized:
+        initialize_auth()
+        _is_initialized = True
     if _cached_token:
         return HEADERS | {"Authorization": _cached_token}
     raise ValueError("认证未初始化")
@@ -44,9 +51,11 @@ def headers() -> dict:
 
 def initialize_auth() -> None:
     """在服务器启动阶段初始化认证信息"""
-    global _cached_token
+    global _cached_token, _is_initialized
     if _cached_token:
         return
+
+    _is_initialized = True
 
     token = os.getenv("XIAOYA_AUTH_TOKEN")
     if token:

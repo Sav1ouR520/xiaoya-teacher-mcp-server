@@ -4,7 +4,7 @@ import requests
 import tempfile
 from markitdown import MarkItDown
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 from pydantic import Field
 from urllib.parse import quote
 
@@ -13,34 +13,33 @@ from ...utils.response import ResponseUtil
 from ...config import MAIN_URL, DOWNLOAD_URL, headers, MCP
 
 
-@MCP.tool()
-def query_course_resources(
-    group_id: Annotated[str, Field(description="课程组id")],
-    format_type: Annotated[
-        Literal["tree", "flat"],
-        Field(
-            description='返回格式("tree"为层级式,"flat"为列表式)',
-            pattern="^(tree|flat)$",
-        ),
-    ],
-) -> dict:
-    """查询特定组的所有课程资源"""
+def _fetch_course_resources_raw(group_id: str) -> dict:
+    """获取课程资源的原始API响应"""
+    response = requests.get(
+        f"{MAIN_URL}/resource/queryCourseResources/v2",
+        headers=headers(),
+        params={"group_id": str(group_id)},
+    ).json()
+
+    if not response.get("success"):
+        return ResponseUtil.error(
+            f"查询课程资源失败: {response.get('msg') or response.get('message', '未知错误')}"
+        )
+    return response
+
+
+def _query_course_resources(group_id: str) -> dict:
+    """根据group_id获取全部的课程资源"""
     try:
-        response = requests.get(
-            f"{MAIN_URL}/resource/queryCourseResources/v2",
-            headers=headers(),
-            params={"group_id": str(group_id)},
-        ).json()
-
+        response = _fetch_course_resources_raw(group_id)
         if not response.get("success"):
-            return ResponseUtil.error(
-                f"查询课程资源失败: {response.get('msg') or response.get('message', '未知错误')}"
-            )
+            return response
 
-        resources = [
-            {
-                (key if key != "quote_id" else "paper_id"): item[key]
-                for key in [
+        resource_map = {}
+        for item in response["data"]:
+            res = {
+                ("paper_id" if k == "quote_id" else k): item[k]
+                for k in (
                     "id",
                     "parent_id",
                     "quote_id",
@@ -51,71 +50,125 @@ def query_course_resources(
                     "sort_position",
                     "created_at",
                     "updated_at",
-                ]
-                if key in item
+                )
+                if k in item
             }
-            for item in response["data"]
-        ]
+            res["level"] = (
+                len(res.get("path", "").split("/")) - 1 if res.get("path") else 0
+            )
+            resource_map[res["id"]] = res
 
-        for idx, item in enumerate(response["data"]):
-            if "link_tasks" in item and item["link_tasks"]:
-                resources[idx]["link_tasks"] = [
+        for item in response["data"]:
+            if item.get("link_tasks"):
+                res = resource_map[item["id"]]
+                res["link_tasks"] = [
                     {
-                        (k if k != "paper_publish_id" else "publish_id"): t[k]
-                        for k in [
+                        ("publish_id" if k == "paper_publish_id" else k): t[k]
+                        for k in (
                             "task_id",
                             "start_time",
                             "end_time",
                             "paper_publish_id",
-                        ]
+                        )
                         if k in t
                     }
                     for t in item["link_tasks"]
                 ]
 
-        for resource in resources:
-            resource["is_folder"] = resource["type"] == ResourceType.FOLDER.value
-            resource["sort_position"] = resource["sort_position"]
-            resource["level"] = len(resource["path"].split("/")) - 1
-            if format_type == "tree" and resource["is_folder"]:
-                resource["children"] = []
-        resources.sort(key=lambda x: x["sort_position"])
+        def build_file_path(res_id):
+            path = []
+            cur = resource_map.get(res_id)
+            while cur:
+                path.append(cur.get("name", ""))
+                cur = resource_map.get(cur.get("parent_id"))
+            return "/".join(reversed([i for i in path if i]))
 
-        resource_map = {r["id"]: r for r in resources}
-
-        def build_file_path(resource_id):
-            if not resource_id or resource_id not in resource_map:
-                return ""
-            path_parts = []
-            current = resource_map[resource_id]
-            while current:
-                path_parts.append(current["name"])
-                parent_id = current["parent_id"]
-                current = resource_map.get(parent_id) if parent_id else None
-            return "/".join(reversed(path_parts))
-
-        for resource in resources:
-            resource["file_path"] = build_file_path(resource["id"])
-
-        if format_type == "tree":
-            root_resources = []
-            for resource in resources:
-                parent_id = resource["parent_id"]
-                if parent_id in resource_map and resource_map[parent_id].get(
-                    "is_folder"
-                ):
-                    resource_map[parent_id]["children"].append(resource)
-                else:
-                    root_resources.append(resource)
-            return ResponseUtil.success(
-                root_resources, f"课程资源树形结构查询成功,共{len(root_resources)}项"
-            )
+        for res in resource_map.values():
+            res["file_path"] = build_file_path(res["id"])
 
         return ResponseUtil.success(
-            resources, f"课程资源列表查询成功,共{len(resources)}项"
+            resource_map, f"成功获取课程资源,共{len(resource_map)}项"
         )
     except Exception as e:
         return ResponseUtil.error("查询课程资源时发生异常", e)
+
+
+@MCP.tool()
+def query_resource_attributes(
+    group_id: Annotated[str, Field(description="课程组id")],
+    resource_id: Annotated[str, Field(description="资源id")],
+) -> dict:
+    """根据group_id和resource_id获取对应资源的属性"""
+    try:
+        result = _query_course_resources(group_id)
+        if not result.get("success"):
+            return result
+
+        target = result["data"].get(resource_id)
+        if not target:
+            return ResponseUtil.error(f"未找到id: {resource_id} 对应的课程资源")
+
+        return ResponseUtil.success(target, f"查询成功: id={resource_id}")
+    except Exception as e:
+        return ResponseUtil.error("查询课程资源属性时发生异常", e)
+
+
+@MCP.tool()
+def query_course_resources_summary(
+    group_id: Annotated[str, Field(description="课程组id")],
+) -> dict:
+    """获取课程所有资源的简要信息"""
+    try:
+        response = _fetch_course_resources_raw(group_id)
+        if not response.get("success"):
+            return response
+
+        raw_data = response["data"]
+        id_to_sort_position = {item["id"]: item["sort_position"] for item in raw_data}
+
+        resource_brief_list = [
+            {
+                "id": item["id"],
+                "quote_id": item["quote_id"],
+                "name": item["name"],
+                "type": ResourceType.get(item["type"]),
+                **(
+                    {"children": []}
+                    if item["type"] == ResourceType.FOLDER.value
+                    else {}
+                ),
+            }
+            for item in raw_data
+        ]
+        resource_brief_list.sort(key=lambda r: id_to_sort_position[r["id"]])
+        id_to_resource_brief = {r["id"]: r for r in resource_brief_list}
+
+        for item in raw_data:
+            parent_id = item["parent_id"]
+            if (
+                parent_id
+                and parent_id in id_to_resource_brief
+                and "children" in id_to_resource_brief[parent_id]
+            ):
+                id_to_resource_brief[parent_id]["children"].append(
+                    id_to_resource_brief[item["id"]]
+                )
+
+        root_resources = [
+            resource_brief
+            for resource_id, resource_brief in id_to_resource_brief.items()
+            if not any(
+                resource_id == item["id"]
+                and item.get("parent_id") in id_to_resource_brief
+                for item in raw_data
+            )
+        ]
+
+        return ResponseUtil.success(
+            root_resources, f"课程资源简要信息查询成功,共{len(root_resources)}项根资源"
+        )
+    except Exception as e:
+        return ResponseUtil.error("查询课程资源简要信息时发生异常", e)
 
 
 @MCP.tool()

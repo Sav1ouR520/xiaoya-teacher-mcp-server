@@ -21,8 +21,12 @@ PROGRAM_SETTING_ANSWER_ITEM_DESC = (
 CODE_ANSWER_DESC = "参考答案代码(含必要注释,用\\n换行)"
 IN_CASES_DESC = "测试用例输入列表[{'in': '示例输入'}]"
 STANDARD_SEQ_DESC = "答案序号: 选题A/B/C..., 填空1/2/3, 判断A/B, 简答/附件A"
-STANDARD_CONTENT_DESC = "答案内容: 选题写字母, 填空写答案(';分隔多值), 判断A/B, 简答写参考答案"
-ANSWER_ITEM_CONTEXT_DESC = "选项内容: 选择题填文本, 填空留空串, 判断A->'true'/B->'', 简答无需"
+STANDARD_CONTENT_DESC = (
+    "答案内容: 选题写字母, 填空写答案(';分隔多值), 判断A/B, 简答写参考答案"
+)
+ANSWER_ITEM_CONTEXT_DESC = (
+    "选项内容: 选择题填文本, 填空留空串, 判断A->'true'/B->'', 简答无需"
+)
 STANDARD_ANSWERS_LIST_DESC = "标准答案列表(元素为StandardAnswer)"
 ANSWER_ITEMS_LIST_DESC = "选项列表(元素为AnswerItem)"
 AUTO_SCORE_DESC = "自动评分类型: 1精确/有序,2部分/有序,11精确/无序,12部分/无序"
@@ -56,6 +60,7 @@ class ResourceType(IntEnum):
     MINDMAP = 3  # 思维导图
     FILE = 6  # 文件
     ASSIGNMENT = 7  # 作业
+    VIDEO = 9  # 视频
     TEACHING_DESIGN = 11  # 教学设计
 
     @staticmethod
@@ -67,6 +72,7 @@ class ResourceType(IntEnum):
             3: "思维导图",
             6: "文件",
             7: "作业",
+            9: "视频",
             11: "教学设计",
         }
         return name_map.get(value, default)
@@ -670,9 +676,7 @@ class FillBlankQuestion(BaseModel):
     automatic_stat: Optional[AutoStatType] = Field(
         default=None, description="自动评分设置(1=关闭, 2=开启)"
     )
-    automatic_type: AutoScoreType = Field(
-        description=AUTO_SCORE_DESC
-    )
+    automatic_type: AutoScoreType = Field(description=AUTO_SCORE_DESC)
     insert_question_id: Optional[str] = Field(
         default=None, description=INSERT_AFTER_DESC
     )
@@ -734,9 +738,7 @@ class ProgramSetting(BaseModel):
     id: str = Field(
         description=PROGRAM_SETTING_ID_DESC,
     )
-    answer_item_id: str = Field(
-        description=PROGRAM_SETTING_ANSWER_ITEM_DESC
-    )
+    answer_item_id: str = Field(description=PROGRAM_SETTING_ANSWER_ITEM_DESC)
 
     max_memory: Optional[int] = Field(description="内存限制(kb)", gt=0, default=None)
     max_time: Optional[int] = Field(description="时间限制(ms)", gt=0, default=None)

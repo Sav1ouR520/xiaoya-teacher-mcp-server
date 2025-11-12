@@ -1,6 +1,6 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.1.0-blue)
+![版本](https://img.shields.io/badge/版本-1.1.1-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.19.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
@@ -61,9 +61,9 @@ python -m xiaoya_teacher_mcp_server
 
 ### 认证配置
 
-服务器支持两种认证方式, 任选其一：
+服务器支持两种认证方式, 任选其一:
 
-#### 方式一：账号密码自动登录(推荐)
+#### 方式一: 账号密码自动登录(推荐)
 ```json
 {
   "mcpServers": {
@@ -79,7 +79,7 @@ python -m xiaoya_teacher_mcp_server
 }
 ```
 
-#### 方式二：Token直接认证
+#### 方式二: Token直接认证
 ```json
 {
   "mcpServers": {
