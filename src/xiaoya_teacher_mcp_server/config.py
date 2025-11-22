@@ -8,15 +8,37 @@ MCP服务器配置模块
 import os
 import random
 import string
+from contextlib import contextmanager
+from contextvars import ContextVar
+from threading import RLock
 from typing import Optional
-from mcp.server.fastmcp import FastMCP
+
 import requests
+from mcp.server.fastmcp import FastMCP
 
-# 全局缓存变量
-_cached_token: Optional[str] = None
 
-# 是否为初始化完成
-_is_initialized: bool = False
+# 认证相关状态统一管理
+class AuthState:
+    def __init__(self):
+        self.request_token: ContextVar[Optional[str]] = ContextVar(
+            "request_token", default=None
+        )
+        self.request_transport: ContextVar[str] = ContextVar(
+            "request_transport", default="stdio"
+        )
+        self.request_account: ContextVar[Optional[str]] = ContextVar(
+            "request_account", default=None
+        )
+        self.request_password: ContextVar[Optional[str]] = ContextVar(
+            "request_password", default=None
+        )
+        self.account_tokens: dict[str, str] = {}
+        self.account_tokens_lock = RLock()
+        self.cached_token: Optional[str] = None
+        self.is_initialized: bool = False
+
+
+auth_state = AuthState()
 
 
 # API基础配置
@@ -32,6 +54,62 @@ HEADERS = {
 }
 
 
+def _normalize_token(token: Optional[str]) -> Optional[str]:
+    if not token:
+        return None
+    token = token.strip()
+    return token and (token if token.startswith("Bearer ") else "Bearer " + token)
+
+
+def resolve_request_token(
+    authorization: Optional[str] = None,
+    account: Optional[str] = None,
+    password: Optional[str] = None,
+) -> Optional[str]:
+    if authorization:
+        return _normalize_token(authorization)
+    if account:
+        with auth_state.account_tokens_lock:
+            cached = auth_state.account_tokens.get(account)
+        if cached:
+            return cached
+        if not password:
+            return None
+        token = login(account, password)
+        norm = _normalize_token(token)
+        if norm:
+            with auth_state.account_tokens_lock:
+                auth_state.account_tokens[account] = norm
+        return norm
+    return None
+
+
+@contextmanager
+def request_context(
+    *,
+    transport: str = "stdio",
+    authorization: Optional[str] = None,
+    account: Optional[str] = None,
+    password: Optional[str] = None,
+):
+    token = (
+        None
+        if transport == "stdio"
+        else resolve_request_token(authorization, account, password)
+    )
+    ts_scope = auth_state.request_transport.set(transport)
+    tk_scope = auth_state.request_token.set(token)
+    acc_scope = auth_state.request_account.set(account)
+    pwd_scope = auth_state.request_password.set(password)
+    try:
+        yield
+    finally:
+        auth_state.request_transport.reset(ts_scope)
+        auth_state.request_token.reset(tk_scope)
+        auth_state.request_account.reset(acc_scope)
+        auth_state.request_password.reset(pwd_scope)
+
+
 def generate_random_state(length: int = 6) -> str:
     """生成随机state字符串,由数字和字母组成"""
     characters = string.ascii_letters + string.digits
@@ -39,45 +117,37 @@ def generate_random_state(length: int = 6) -> str:
 
 
 def headers() -> dict:
-    """创建HTTP请求头,仅使用已初始化的认证信息"""
-    global _cached_token, _is_initialized
-    if not _is_initialized:
-        initialize_auth()
-        _is_initialized = True
-    if _cached_token:
-        return HEADERS | {"Authorization": _cached_token}
-    raise ValueError("认证未初始化")
+    transport = auth_state.request_transport.get()
+    if transport == "stdio":
+        if not auth_state.is_initialized:
+            initialize_auth()
+        if auth_state.cached_token:
+            return HEADERS | {"Authorization": auth_state.cached_token}
+        raise ValueError("stdio 认证未初始化")
+    token = auth_state.request_token.get()
+    if token:
+        return HEADERS | {"Authorization": token}
+    raise ValueError(
+        f"{transport} 缺少认证(Authorization 或 x-xiaoya-account/x-xiaoya-password)"
+    )
 
 
 def initialize_auth() -> None:
-    """在服务器启动阶段初始化认证信息"""
-    global _cached_token, _is_initialized
-    if _cached_token:
+    if auth_state.cached_token:
         return
-
-    _is_initialized = True
-
     token = os.getenv("XIAOYA_AUTH_TOKEN")
-    if token:
-        _cached_token = token if token.startswith("Bearer ") else "Bearer " + token
-    else:
-        account, password = (
-            os.getenv("XIAOYA_ACCOUNT"),
-            os.getenv("XIAOYA_PASSWORD"),
-        )
-        if account and password:
-            _cached_token = login(account, password)
-        else:
+    if not token:
+        acc, pwd = os.getenv("XIAOYA_ACCOUNT"), os.getenv("XIAOYA_PASSWORD")
+        if not (acc and pwd):
             raise ValueError(
-                "未配置认证信息. 请设置环境变量:\n"
-                "1. XIAOYA_AUTH_TOKEN 或\n"
-                "2. XIAOYA_ACCOUNT 和 XIAOYA_PASSWORD"
+                "缺少 stdio 认证环境变量: 设置 XIAOYA_AUTH_TOKEN 或 (XIAOYA_ACCOUNT + XIAOYA_PASSWORD)"
             )
-
-    if _cached_token:
-        print(f"认证初始化成功: {_cached_token}")
-    else:
-        raise ValueError("认证初始化失败: 未获取到有效的认证令牌")
+        token = login(acc, pwd)
+    auth_state.cached_token = _normalize_token(token)
+    if not auth_state.cached_token:
+        raise ValueError("认证初始化失败, 无效 token")
+    auth_state.is_initialized = True
+    print("认证初始化成功")
 
 
 def login(account: str, password: str) -> Optional[str]:

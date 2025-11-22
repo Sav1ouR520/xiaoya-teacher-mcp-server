@@ -19,6 +19,7 @@ from ...types.types import (
     AttachmentQuestionData,
     ChoiceQuestion,
     CodeQuestion,
+    CodeQuestionData,
     FillBlankQuestionData,
     LineText,
     MultipleChoiceQuestion,
@@ -424,6 +425,7 @@ def office_create_questions(
                 TrueFalseQuestionData,
                 ShortAnswerQuestionData,
                 AttachmentQuestionData,
+                CodeQuestionData,
             ]
         ],
         Field(description="题目列表", min_length=1),
@@ -444,12 +446,25 @@ def office_create_questions(
                     return ResponseUtil.error(f"第{i}题格式错误", e)
             elif question.type not in QuestionType:
                 return ResponseUtil.error(f"第{i}题类型不支持导入: {question.type}")
+
+        questions_data = []
+        for question in questions:
+            data = question.model_dump()
+            if question.type == QuestionType.SHORT_ANSWER:
+                data["answer_items"] = [{"seqno": "A"}]
+            elif question.type == QuestionType.TRUE_FALSE:
+                data["answer_items"] = [
+                    {"seqno": "A", "context": "true"},
+                    {"seqno": "B", "context": ""},
+                ]
+            elif question.type == QuestionType.ATTACHMENT:
+                data["answer_items"] = [{"seqno": "A"}]
+            elif question.type == QuestionType.CODE:
+                data["answer_items"] = []
+            questions_data.append(data)
         response = requests.post(
             url,
-            json={
-                "paper_id": str(paper_id),
-                "questions": [question.model_dump() for question in questions],
-            },
+            json={"paper_id": str(paper_id), "questions": questions_data},
             headers=headers(),
         ).json()
         if response.get("success"):

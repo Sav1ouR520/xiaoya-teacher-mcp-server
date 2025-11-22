@@ -1,6 +1,6 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.1.1-blue)
+![版本](https://img.shields.io/badge/版本-1.2.1-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.19.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
@@ -59,11 +59,13 @@ python -m xiaoya_teacher_mcp_server
 
 ## ⚙️ 配置说明
 
+
 ### 认证配置
 
-服务器支持两种认证方式, 任选其一:
+服务器支持两种认证方式,均支持本地和远程自动登录与缓存：
 
-#### 方式一: 账号密码自动登录(推荐)
+#### 方式一：账号密码自动登录(推荐,支持多账号远程缓存)
+本地(stdio)和远程(SSE/HTTP)均可通过账号密码自动登录,token 会自动缓存,远程多账号也会自动保存.
 ```json
 {
   "mcpServers": {
@@ -78,8 +80,15 @@ python -m xiaoya_teacher_mcp_server
   }
 }
 ```
+远程请求也支持通过 header 传递账号密码,首次访问自动登录并缓存：
+```http
+POST /mcp/xxx
+X-XIAOYA-ACCOUNT: your_account
+X-XIAOYA-PASSWORD: your_password
+```
 
-#### 方式二: Token直接认证
+#### 方式二：Token直接认证
+本地和远程均可直接传递 Bearer Token,无需账号密码.
 ```json
 {
   "mcpServers": {
@@ -92,6 +101,10 @@ python -m xiaoya_teacher_mcp_server
     }
   }
 }
+```
+远程请求也支持通过 header 传递 Authorization：
+```http
+Authorization: Bearer your_bearer_token
 ```
 
 ### 传输协议配置
@@ -142,6 +155,49 @@ python -m xiaoya_teacher_mcp_server
   }
 }
 ```
+
+### 高级配置：多传输同时启用
+
+在需要同时对多种客户端开放 MCP 服务时, 可通过逗号分隔一次性启用多个传输协议.示例：
+
+```json
+{
+  "mcpServers": {
+    "xiaoya-teacher-mcp-server": {
+      "command": "uvx",
+      "args": ["xiaoya-teacher-mcp-server"],
+      "env": {
+        "MCP_TRANSPORT": "sse,streamable-http",
+        "MCP_MOUNT_PATH": "/mcp",
+        "MCP_HOST": "0.0.0.0",
+        "MCP_PORT": "8000",
+      }
+    }
+  }
+}
+```
+
+此时，远程客户端只需如下配置即可访问（无需本地环境变量，支持自动登录和多账号缓存）：
+
+```json
+{
+  "mcpServers": {
+    "xiaoya-teacher-mcp-sse-server": {
+      "url": "http://ip:port/mcp/sse",
+      "headers": {
+        "x-xiaoya-account": "你的账号",
+        "x-xiaoya-password": "你的密码"
+      }
+    }
+  }
+}
+```
+也支持 streamable-http 协议，只需将 url 改为 `/mcp` 路径。
+
+- MCP_PORT 与 MCP_HOST 为可选项, 用于指定监听地址与端口(仅对基于 HTTP 的传输生效)
+- 同时启用 SSE 与 Streamable HTTP 时会复用同一 Uvicorn/Starlette 服务, 客户端可并发使用两种协议
+- 所有基于 HTTP 的传输挂载到相同路径, 默认为 http://host:port/mcp/*, 可用 MCP_MOUNT_PATH 调整
+- stdio 传输不使用 MCP_HOST/MCP_PORT
 
 ## 📖 使用指南
 

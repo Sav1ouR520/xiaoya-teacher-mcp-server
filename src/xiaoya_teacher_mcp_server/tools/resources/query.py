@@ -116,6 +116,12 @@ def query_resource_attributes(
 @MCP.tool()
 def query_course_resources_summary(
     group_id: Annotated[str, Field(description="课程组id")],
+    view_mode: Annotated[
+        str,
+        Field(
+            description="视图模式(tree/flat)", default="tree", pattern="^(tree|flat)$"
+        ),
+    ] = "tree",
 ) -> dict:
     """获取课程所有资源的简要信息"""
     try:
@@ -124,12 +130,27 @@ def query_course_resources_summary(
             return response
 
         raw_data = response["data"]
+
+        if view_mode == "flat":
+            flat_list = [
+                {
+                    "id": item["id"],
+                    "paper_id": item["quote_id"],
+                    "name": item["name"],
+                    "type": ResourceType.get(item["type"]),
+                }
+                for item in sorted(raw_data, key=lambda i: i["sort_position"])
+            ]
+            return ResponseUtil.success(
+                flat_list, f"课程资源(flat)查询成功, 共{len(flat_list)}项"
+            )
+
         id_to_sort_position = {item["id"]: item["sort_position"] for item in raw_data}
 
         resource_brief_list = [
             {
                 "id": item["id"],
-                "quote_id": item["quote_id"],
+                "paper_id": item["quote_id"],
                 "name": item["name"],
                 "type": ResourceType.get(item["type"]),
                 **(
@@ -165,7 +186,7 @@ def query_course_resources_summary(
         ]
 
         return ResponseUtil.success(
-            root_resources, f"课程资源简要信息查询成功,共{len(root_resources)}项根资源"
+            root_resources, f"课程资源简要信息查询成功,共{len(raw_data)}项资源"
         )
     except Exception as e:
         return ResponseUtil.error("查询课程资源简要信息时发生异常", e)

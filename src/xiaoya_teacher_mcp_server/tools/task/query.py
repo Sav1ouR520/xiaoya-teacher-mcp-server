@@ -9,7 +9,7 @@ from typing import Annotated
 from pydantic import Field
 
 from ...tools.questions.query import parse_answer_items, parse_text
-from ..resources.query import query_course_resources
+from ..resources.query import _query_course_resources
 from ...types.types import AnswerStatus, QuestionType
 from ...utils.response import ResponseUtil
 from ...config import MAIN_URL, headers, MCP
@@ -20,12 +20,12 @@ def query_group_tasks(
     group_id: Annotated[str, Field(description="课程组id")],
 ) -> dict:
     """查询课程组发布的全部测试/考试/任务"""
-    result = query_course_resources(group_id, "flat")
+    result = _query_course_resources(group_id)
     if not result.get("success"):
         result["message"] = f"课程测试/考试/任务查询失败: {result['message']}"
         return result
 
-    tasks = [resource for resource in result["data"] if resource.get("type") == 7]
+    tasks = [resource for resource in result["data"].values() if resource.get("type") == 7]
 
     flattened_tasks = [
         {
