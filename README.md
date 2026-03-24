@@ -1,6 +1,6 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.3.0-blue)
+![版本](https://img.shields.io/badge/版本-1.3.1-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
@@ -38,6 +38,7 @@
 - **任务发布** - 查询课程组任务列表、任务详情
 - **成绩管理** - 学生答题情况统计、成绩分析
 - **答题分析** - 学生答题详情预览、题目解析
+- **AI 批阅** - 逐题打分、批注、提交批改，支持附件答案（图片/PDF/文件）查看
 
 ## 🚀 快速开始
 
@@ -71,7 +72,7 @@ pip install "xiaoya-teacher-mcp-server[full]"
 ### 本机工具安装
 ```bash
 # 将当前仓库安装为本机可执行 MCP 命令
-uv tool install -e --reinstall /Users/bu/Documents/Project/ros2/xiaoya-teacher-mcp-server
+uv tool install -e --reinstall .
 ```
 
 ## ⚙️ 配置说明
@@ -272,6 +273,7 @@ xiaoya-teacher-mcp-server/
 
 #### 📋 任务管理模块
 - **query.py** - 默认返回任务和答题摘要, 按需返回完整答卷明细
+- **grade.py** - 逐题打分与提交批改, 附件答案文件获取
 
 ## 🔧 技术栈
 
