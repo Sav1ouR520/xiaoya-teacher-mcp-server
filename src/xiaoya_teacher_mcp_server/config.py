@@ -16,6 +16,9 @@ from typing import Optional
 import requests
 from mcp.server.fastmcp import FastMCP
 
+from .utils.logging import get_logger
+
+LOGGER = get_logger("xiaoya_teacher_mcp_server.auth")
 
 # 认证相关状态统一管理
 class AuthState:
@@ -84,6 +87,36 @@ def resolve_request_token(
     return None
 
 
+def refresh_active_token() -> Optional[str]:
+    """刷新当前上下文对应的认证令牌。"""
+    transport = auth_state.request_transport.get()
+    if transport == "stdio":
+        account = os.getenv("XIAOYA_ACCOUNT")
+        password = os.getenv("XIAOYA_PASSWORD")
+        if not (account and password):
+            return None
+        token = _normalize_token(login(account, password))
+        if not token:
+            return None
+        auth_state.cached_token = token
+        auth_state.is_initialized = True
+        LOGGER.info("stdio 认证令牌已刷新")
+        return token
+
+    account = auth_state.request_account.get()
+    password = auth_state.request_password.get()
+    if not (account and password):
+        return None
+    token = _normalize_token(login(account, password))
+    if not token:
+        return None
+    auth_state.request_token.set(token)
+    with auth_state.account_tokens_lock:
+        auth_state.account_tokens[account] = token
+    LOGGER.info("%s 认证令牌已刷新", transport)
+    return token
+
+
 @contextmanager
 def request_context(
     *,
@@ -147,13 +180,13 @@ def initialize_auth() -> None:
     if not auth_state.cached_token:
         raise ValueError("认证初始化失败, 无效 token")
     auth_state.is_initialized = True
-    print("认证初始化成功")
+    LOGGER.info("认证初始化成功")
 
 
 def login(account: str, password: str) -> Optional[str]:
     """通过账号密码登录获取认证令牌"""
     try:
-        session = requests.session()
+        session = requests.Session()
 
         # 登录数据
         login_data = {
@@ -210,8 +243,11 @@ def login(account: str, password: str) -> Optional[str]:
                 url, **({"json": data} if data else {}), headers=HEADERS
             ).raise_for_status()
 
-        return "Bearer " + session.cookies.get("FS-prd-access-token")
+        token = session.cookies.get("FS-prd-access-token")
+        if not token:
+            raise ValueError("登录成功但未拿到访问令牌")
+        return "Bearer " + token
 
-    except Exception as e:
-        print(f"登录失败: {str(e)}")
+    except (requests.RequestException, ValueError) as e:
+        LOGGER.error("登录失败: %s", e)
         return None

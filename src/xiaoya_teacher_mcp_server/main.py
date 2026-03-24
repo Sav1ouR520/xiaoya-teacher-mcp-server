@@ -6,11 +6,24 @@ import uvicorn
 from starlette.routing import Mount
 from starlette.applications import Starlette
 
-import logging
 from xiaoya_teacher_mcp_server import tools  # noqa: F401
 from xiaoya_teacher_mcp_server.config import MCP, request_context
+from xiaoya_teacher_mcp_server.utils.logging import get_logger
 
 VALID = {"stdio", "sse", "streamable-http"}
+LOGGER = get_logger("xiaoya_teacher_mcp_server.main")
+
+
+def _mask_sensitive_headers(raw_headers):
+    masked = {}
+    for key, value in raw_headers.items():
+        if key == "authorization":
+            masked[key] = "<redacted>"
+        elif key == "x-xiaoya-password":
+            masked[key] = "<redacted>"
+        else:
+            masked[key] = value
+    return masked
 
 
 def _start_transports(transports, mount_path):
@@ -18,14 +31,7 @@ def _start_transports(transports, mount_path):
     if not other:
         return
 
-    logger = logging.getLogger("xiaoya_teacher_mcp_server.transports")
-    if not logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter("[%(asctime)s] %(levelname)s %(message)s")
-        )
-        logger.addHandler(handler)
-        logger.propagate = False
+    logger = get_logger("xiaoya_teacher_mcp_server.transports")
 
     def wrap(app, transport):
         async def _wrapped(scope, receive, send):
@@ -61,12 +67,26 @@ def _start_transports(transports, mount_path):
                 )
                 logger.warning(
                     "Unauthorized %s request to %s over %s from %s:%s | Headers: %s"
-                    % (method, path, protocol, client[0], client[1], headers)
+                    % (
+                        method,
+                        path,
+                        protocol,
+                        client[0],
+                        client[1],
+                        _mask_sensitive_headers(headers),
+                    )
                 )
                 return
             logger.info(
                 "Accepted %s request to %s over %s from %s:%s | Headers: %s"
-                % (method, path, protocol, client[0], client[1], headers)
+                % (
+                    method,
+                    path,
+                    protocol,
+                    client[0],
+                    client[1],
+                    _mask_sensitive_headers(headers),
+                )
             )
             with request_context(
                 transport=transport,
@@ -104,7 +124,7 @@ def main():
         transports = raw & VALID
         invalid = raw - VALID
         if invalid:
-            print(f"忽略无效传输: {sorted(invalid)}")
+            LOGGER.warning("忽略无效传输: %s", sorted(invalid))
         host = os.getenv("MCP_HOST")
         port = os.getenv("MCP_PORT")
         if host:
@@ -113,16 +133,16 @@ def main():
             try:
                 MCP.settings.port = int(port)
             except ValueError:
-                print(f"无效端口 {port}, 使用默认 {MCP.settings.port}")
+                LOGGER.warning("无效端口 %s, 使用默认 %s", port, MCP.settings.port)
         mount_path = os.getenv("MCP_MOUNT_PATH", "/mcp")
         if transports - {"stdio"}:
             threading.Thread(
                 target=_start_transports, args=(transports, mount_path), daemon=True
             ).start()
-        print("启动 MCP 服务器: stdio (延迟认证初始化)")
+        LOGGER.info("启动 MCP 服务器: stdio (延迟认证初始化)")
         MCP.run(transport="stdio")
     except Exception as e:
-        print(f"服务器启动失败: {e}")
+        LOGGER.exception("服务器启动失败: %s", e)
         sys.exit(1)
 
 

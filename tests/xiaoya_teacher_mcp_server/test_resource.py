@@ -1,4 +1,7 @@
 import uuid
+import os
+
+import pytest
 from dotenv import load_dotenv, find_dotenv
 from xiaoya_teacher_mcp_server.tools.group import query as group_query
 from xiaoya_teacher_mcp_server.tools.resources import (
@@ -7,9 +10,17 @@ from xiaoya_teacher_mcp_server.tools.resources import (
     delete as resource_delete,
     update as resource_update,
 )
-from xiaoya_teacher_mcp_server.types.types import ResourceType
+from xiaoya_teacher_mcp_server.types import ResourceType
 
 load_dotenv(find_dotenv())
+
+requires_live_auth = pytest.mark.skipif(
+    not (
+        os.getenv("XIAOYA_AUTH_TOKEN")
+        or (os.getenv("XIAOYA_ACCOUNT") and os.getenv("XIAOYA_PASSWORD"))
+    ),
+    reason="需要配置小雅认证环境变量",
+)
 
 
 def _flatten_resources(resource_tree):
@@ -49,6 +60,7 @@ def _get_group_and_root() -> tuple:
     return group_id, root_attr["data"]["id"]
 
 
+@requires_live_auth
 def test_query_resource():
     """测试查询课程资源列表"""
     group_id, _ = _get_group_and_root()
@@ -58,6 +70,7 @@ def test_query_resource():
     print(f"\n✓ 查询成功,共{len(all_resources)}个资源")
 
 
+@requires_live_auth
 def test_create_update_and_delete():
     """测试创建、更新和删除资源"""
     group_id, root_id = _get_group_and_root()
@@ -104,6 +117,7 @@ def test_create_update_and_delete():
             pass
 
 
+@requires_live_auth
 def test_move_and_sort():
     """测试移动和排序资源"""
     group_id, root_id = _get_group_and_root()
@@ -177,3 +191,144 @@ def test_move_and_sort():
                     resource_delete.delete_course_resource(group_id, _id)
             except Exception:
                 pass
+
+
+def test_query_course_resources_full_includes_extended_fields(monkeypatch):
+    monkeypatch.setattr(
+        resource_query,
+        "_fetch_course_resources_response",
+        lambda group_id: {
+            "success": True,
+            "data": [
+                {
+                    "id": "node-1",
+                    "parent_id": "",
+                    "quote_id": "paper-1",
+                    "name": "课堂作业",
+                    "type": 7,
+                    "path": "root/node-1",
+                    "mimetype": None,
+                    "sort_position": 1,
+                    "created_at": "2026-03-09T00:00:00Z",
+                    "updated_at": "2026-03-09T00:00:00Z",
+                    "download": 2,
+                    "public": 2,
+                    "published": 1,
+                    "finish_teaching": 0,
+                    "resource_type": 11,
+                    "property": {"k": "v"},
+                    "tag": "linux",
+                    "link_tasks": [],
+                }
+            ],
+        },
+    )
+
+    result = resource_query.query_course_resources("group-1", detail_level="full")
+
+    assert result["success"]
+    data = result["data"]["node-1"]
+    assert data["paper_id"] == "paper-1"
+    assert data["public"] == 2
+    assert data["download"] == 2
+    assert data["resource_type"] == 11
+    assert data["tag"] == "linux"
+
+
+def test_query_group_order_setting(monkeypatch):
+    monkeypatch.setattr(
+        resource_query,
+        "get_json",
+        lambda *args, **kwargs: {
+            "success": True,
+            "data": {"is_setting": False, "setting_order": None},
+        },
+    )
+
+    result = resource_query.query_group_order_setting("group-1")
+
+    assert result["success"]
+    assert result["data"] == {"is_setting": False, "setting_order": None}
+
+
+def test_query_course_resources_defaults_to_summary(monkeypatch):
+    monkeypatch.setattr(
+        resource_query,
+        "_fetch_course_resources_response",
+        lambda group_id: {
+            "success": True,
+            "data": [
+                {
+                    "id": "node-1",
+                    "parent_id": "",
+                    "quote_id": "paper-1",
+                    "name": "课堂作业",
+                    "type": 7,
+                    "path": "root/node-1",
+                    "sort_position": 1,
+                }
+            ],
+        },
+    )
+
+    result = resource_query.query_course_resources("group-1")
+
+    assert result["success"]
+    assert result["data"] == {
+        "node-1": {
+            "id": "node-1",
+            "paper_id": "paper-1",
+            "name": "课堂作业",
+            "type": "作业",
+        }
+    }
+
+
+def test_query_resource_folder_snapshot(monkeypatch):
+    monkeypatch.setattr(
+        resource_query,
+        "_load_course_resource_map",
+        lambda *args, **kwargs: {
+            "folder-1": {
+                "id": "folder-1",
+                "parent_id": "root",
+                "name": "课堂作业",
+                "type_name": "文件夹",
+                "sort_position": 0,
+                "public": 2,
+                "download": 1,
+                "published": 1,
+                "finish_teaching": 0,
+            },
+            "node-1": {
+                "id": "node-1",
+                "parent_id": "folder-1",
+                "paper_id": "paper-1",
+                "name": "练习1",
+                "type_name": "作业",
+                "sort_position": 2,
+                "public": 2,
+                "download": 2,
+                "published": 1,
+                "finish_teaching": 0,
+            },
+            "node-2": {
+                "id": "node-2",
+                "parent_id": "folder-1",
+                "paper_id": None,
+                "name": "讲义",
+                "type_name": "文件",
+                "sort_position": 1,
+                "public": 1,
+                "download": 1,
+                "published": 1,
+                "finish_teaching": 1,
+            },
+        },
+    )
+
+    result = resource_query.query_resource_folder_snapshot("group-1", "folder-1")
+
+    assert result["success"]
+    assert result["data"]["child_count"] == 2
+    assert [item["id"] for item in result["data"]["children"]] == ["node-2", "node-1"]

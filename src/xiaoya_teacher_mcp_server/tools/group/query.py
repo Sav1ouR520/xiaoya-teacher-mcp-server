@@ -1,22 +1,25 @@
 """课程组查询 MCP 工具"""
 
-import requests
+from __future__ import annotations
+
 from typing import Annotated
+
 from pydantic import Field
 
-from ...types.types import AttendanceStatus
+from ... import field_descriptions as desc
+from ...config import MAIN_URL, MCP
+from ...types.task_models import AttendanceStatus
+from ...utils.client import APIRequestError, extract_response_message, get_json, post_json
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, headers, MCP
+from ..resources import query as resource_query
+from ..task import query as task_query
 
 
 @MCP.tool()
 def query_teacher_groups() -> dict:
     """查询教师的课程组"""
     try:
-        response = requests.get(
-            f"{MAIN_URL}/group/teacher/groups", headers=headers()
-        ).json()
-
+        response = get_json(f"{MAIN_URL}/group/teacher/groups")
         if response.get("success"):
             courses = [
                 {
@@ -38,143 +41,183 @@ def query_teacher_groups() -> dict:
                 for item in response["data"]
             ]
             return ResponseUtil.success(courses, "查询成功")
-        else:
-            return ResponseUtil.error(
-                response.get("msg") or response.get("message") or "未知错误"
-            )
-    except Exception as e:
+        return ResponseUtil.error(extract_response_message(response))
+    except APIRequestError as e:
         return ResponseUtil.error("查询教师的课程组失败", e)
 
 
 @MCP.tool()
+def query_group_snapshot(
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
+) -> dict:
+    """查询课程组总览快照"""
+    try:
+        groups_result = query_teacher_groups()
+        if not groups_result.get("success"):
+            return groups_result
+        group_data = next(
+            (group for group in groups_result["data"] if group["group_id"] == str(group_id)),
+            None,
+        )
+        if group_data is None:
+            return ResponseUtil.error(f"未找到课程组: {group_id}")
+
+        classes_result = query_group_classes(group_id)
+        if not classes_result.get("success"):
+            return classes_result
+        tasks_result = task_query.query_group_tasks(group_id, detail_level="summary")
+        if not tasks_result.get("success"):
+            return tasks_result
+        resources_result = resource_query.query_course_resources(
+            group_id, detail_level="summary"
+        )
+        if not resources_result.get("success"):
+            return resources_result
+        attendance_result = query_attendance_records(group_id)
+        if not attendance_result.get("success"):
+            return attendance_result
+
+        recent_attendances = sorted(
+            attendance_result["data"],
+            key=lambda record: record.get("start_time") or "",
+            reverse=True,
+        )[:5]
+        return ResponseUtil.success(
+            {
+                **group_data,
+                "class_count": len(classes_result["data"]),
+                "task_count": len(tasks_result["data"]),
+                "resource_count": len(resources_result["data"]),
+                "recent_attendance_count": len(recent_attendances),
+                "recent_attendances": recent_attendances,
+            },
+            "课程组总览查询成功",
+        )
+    except (APIRequestError, ValueError) as e:
+        return ResponseUtil.error("查询课程组总览失败", e)
+
+
+@MCP.tool()
 def query_attendance_records(
-    group_id: Annotated[str, Field(description="课程组id")],
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
 ) -> dict:
     """查询课程组的全部签到记录情况"""
     try:
-        page, page_size = 1, 50
-
+        page_size = 50
         classes_result = query_group_classes(group_id)
         class_map = {
-            cls["class_id"]: cls["class_name"] for cls in classes_result["data"]
+            course_class["class_id"]: course_class["class_name"]
+            for course_class in classes_result["data"]
         }
 
         all_data = []
-        current_page = page
-
+        current_page = 1
         while True:
-            response = requests.post(
+            response = post_json(
                 f"{MAIN_URL}/register/group",
-                headers=headers(),
-                json={
+                payload={
                     "group_id": str(group_id),
                     "page": current_page,
                     "page_size": page_size,
                 },
-            ).json()
+            )
 
             if not response.get("success"):
-                return ResponseUtil.error(
-                    response.get("msg") or response.get("message") or "未知错误"
-                )
+                return ResponseUtil.error(extract_response_message(response))
 
-            keep_keys = [
-                "id",
-                "start_time",
-                "end_time",
-                "class_id",
-                "course_id",
-                "register_count",
-            ]
-            for record in response["data"]["result"]["registers"]:
+            registers = response["data"]["result"]["registers"]
+            for record in registers:
                 filtered_record = {
-                    key: record[key] for key in keep_keys if key in record
+                    key: record[key]
+                    for key in [
+                        "id",
+                        "start_time",
+                        "end_time",
+                        "class_id",
+                        "course_id",
+                        "register_count",
+                    ]
+                    if key in record
                 }
                 filtered_record["class_name"] = class_map.get(
                     record["class_id"], "未知班级"
                 )
                 all_data.append(filtered_record)
+
             total_register = response["data"]["total_register"]
             if total_register:
                 total_pages = (total_register + page_size - 1) // page_size
                 if current_page >= total_pages:
                     break
-            elif len(response["data"]["result"]["register"]) < page_size:
+            elif len(registers) < page_size:
                 break
 
             current_page += 1
 
         return ResponseUtil.success(all_data, "签到记录查询成功")
-    except Exception as e:
+    except APIRequestError as e:
         return ResponseUtil.error("查询课程组的签到记录失败", e)
 
 
 @MCP.tool()
 def query_group_classes(
-    group_id: Annotated[str, Field(description="课程组id")],
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
 ) -> dict:
     """查询课程组的班级列表"""
     try:
-        response = requests.get(
-            f"{MAIN_URL}/group/class/list/{group_id}", headers=headers()
-        ).json()
+        response = get_json(f"{MAIN_URL}/group/class/list/{group_id}")
         if response.get("success"):
             class_list = [
                 {
-                    "class_id": c["class_id"],
-                    "class_name": c["class_name"],
-                    "member_count": c["member_count"],
+                    "class_id": course_class["class_id"],
+                    "class_name": course_class["class_name"],
+                    "member_count": course_class["member_count"],
                 }
-                for c in response["data"]
+                for course_class in response["data"]
             ]
             return ResponseUtil.success(class_list, "班级列表查询成功")
-        else:
-            return ResponseUtil.error(
-                response.get("msg") or response.get("message") or "未知错误"
-            )
-    except Exception as e:
+        return ResponseUtil.error(extract_response_message(response))
+    except APIRequestError as e:
         return ResponseUtil.error("查询课程组的班级列表失败", e)
 
 
 @MCP.tool()
 def query_single_attendance_students(
-    group_id: Annotated[str, Field(description="课程组id")],
-    register_id: Annotated[str, Field(description="签到id")],
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
+    register_id: Annotated[str, Field(description=desc.REGISTER_ID_DESC)],
     course_id: Annotated[
         str,
-        Field(description="课程id[query_attendance_records的course_id]"),
+        Field(description=desc.COURSE_ID_FROM_ATTENDANCE_DESC),
     ],
 ) -> dict:
     """查询单次签到的学生列表"""
     try:
-        response = requests.post(
+        response = post_json(
             f"{MAIN_URL}/register/one/student",
-            headers=headers(),
-            json={
+            payload={
                 "register_id": str(register_id),
                 "group_id": str(group_id),
                 "course_id": str(course_id),
             },
-        ).json()
+        )
         if response.get("success"):
-            keep_keys = [
-                "nickname",
-                "register_status",
-                "register_time",
-                "student_number",
-                "user_id",
-            ]
             students = []
-            for s in response["data"]["result"]:
-                student = {key: s[key] for key in keep_keys}
-                student["register_status"] = AttendanceStatus.get(
-                    student["register_status"], "未知"
+            for student in response["data"]["result"]:
+                filtered = {
+                    key: student[key]
+                    for key in [
+                        "nickname",
+                        "register_status",
+                        "register_time",
+                        "student_number",
+                        "user_id",
+                    ]
+                }
+                filtered["register_status"] = AttendanceStatus.get(
+                    filtered["register_status"], "未知"
                 )
-                students.append(student)
+                students.append(filtered)
             return ResponseUtil.success(students, "学生列表查询成功")
-        else:
-            return ResponseUtil.error(
-                response.get("msg") or response.get("message") or "未知错误"
-            )
-    except Exception as e:
+        return ResponseUtil.error(extract_response_message(response))
+    except APIRequestError as e:
         return ResponseUtil.error("查询单次签到的学生列表失败", e)

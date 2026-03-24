@@ -82,7 +82,7 @@ def auth_status(refresh: bool = False) -> Dict[str, Any]:
             return ResponseUtil.error("认证令牌不存在或登录失败")
         return ResponseUtil.success(
             {
-                "token": token,
+                "token_present": bool(token),
                 "transport": transport,
                 "account": account,
                 "replaced": replaced,
@@ -90,5 +90,5 @@ def auth_status(refresh: bool = False) -> Dict[str, Any]:
             },
             "认证状态获取成功",
         )
-    except Exception as e:
+    except ValueError as e:
         return ResponseUtil.error("获取或更新认证状态失败", e)

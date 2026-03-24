@@ -1,17 +1,20 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.2.1-blue)
+![版本](https://img.shields.io/badge/版本-1.3.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
-![MCP](https://img.shields.io/badge/MCP-1.19.0+-purple)
+![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
 
-专为教师设计的小雅智能教学平台的教育管理MCP服务器, 通过MCP协议与AI助手集成, 提供完整的教育资源管理、题目创建、班级管理、签到统计和任务测验等功能. 让AI助手成为您教学工作的得力助手!
+专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、题目创建、班级查询、签到统计和任务测验等能力。
+
+默认安装采用精简依赖，适合本地 editable、`uv tool` 和标准发布包；如需完整文档格式转换能力，可额外安装 `full` extra。
 
 ## ✨ 核心特性
 
 ### 🎯 AI助手集成
 - **MCP协议支持** - 完美集成到支持MCP的AI助手(如Claude Desktop、Cursor等)
 - **多种传输方式** - 支持stdio、SSE、Streamable HTTP传输协议
+- **摘要优先查询** - 题目、资源、任务默认返回摘要, 减少 AI token 消耗
 - **统一响应格式** - 标准化的API响应, 便于AI助手解析和展示
 
 ### 📚 智能题库系统
@@ -38,23 +41,37 @@
 
 ## 🚀 快速开始
 
-### 一键安装(推荐)
+### 发布安装
 ```bash
-# 使用uvx直接运行, 无需本地安装
+# 使用 uvx 直接运行
 uvx xiaoya-teacher-mcp-server
 ```
 
 ### 本地开发安装
 ```bash
-# 克隆项目
 git clone https://github.com/Sav1ouR520/xiaoya-teacher-mcp-server.git
 cd xiaoya-teacher-mcp-server
 
-# 安装依赖(推荐使用uv)
-uv add -e .
+# 安装开发依赖
+uv sync --dev
 
 # 运行服务器
-python -m xiaoya_teacher_mcp_server
+uv run xiaoya-teacher-mcp-server
+```
+
+### 完整文档转换支持
+```bash
+# 本地开发时启用 full extra
+uv sync --dev --extra full
+
+# 发布安装时启用 full extra
+pip install "xiaoya-teacher-mcp-server[full]"
+```
+
+### 本机工具安装
+```bash
+# 将当前仓库安装为本机可执行 MCP 命令
+uv tool install -e --reinstall /Users/bu/Documents/Project/ros2/xiaoya-teacher-mcp-server
 ```
 
 ## ⚙️ 配置说明
@@ -65,7 +82,7 @@ python -m xiaoya_teacher_mcp_server
 服务器支持两种认证方式,均支持本地和远程自动登录与缓存：
 
 #### 方式一：账号密码自动登录(推荐,支持多账号远程缓存)
-本地(stdio)和远程(SSE/HTTP)均可通过账号密码自动登录,token 会自动缓存,远程多账号也会自动保存.
+本地(stdio)和远程(SSE/HTTP)均可通过账号密码自动登录,token 会自动缓存,远程多账号也会自动保存。若请求过程中检测到认证过期,服务端会自动重新登录一次并重试当前请求.
 ```json
 {
   "mcpServers": {
@@ -88,7 +105,7 @@ X-XIAOYA-PASSWORD: your_password
 ```
 
 #### 方式二：Token直接认证
-本地和远程均可直接传递 Bearer Token,无需账号密码.
+本地和远程均可直接传递 Bearer Token,无需账号密码。该模式不会自动重新登录,若 token 过期需由调用方更新后再重试.
 ```json
 {
   "mcpServers": {
@@ -208,30 +225,32 @@ Authorization: Bearer your_bearer_token
 
 ## 🏗️ 项目架构
 
-```
-xiaoya_teacher_mcp_server/
-├── config.py              # 配置文件和认证模块
-├── main.py                # 服务器入口和传输协议处理
-├── tools/                 # 核心工具模块
-│   ├── questions/         # 题目管理工具
-│   │   ├── create.py      # 题目创建(7种题型)
-│   │   ├── update.py      # 题目更新和编辑
-│   │   ├── query.py       # 题目查询和检索
-│   │   └── delete.py      # 题目删除
-│   ├── resources/         # 资源管理工具
-│   │   ├── create.py      # 资源创建
-│   │   ├── update.py      # 资源更新
-│   │   ├── query.py       # 资源查询、文件下载和转换
-│   │   └── delete.py      # 资源删除
-│   ├── group/             # 班级和签到管理
-│   │   ├── query.py       # 班级和签到查询
-│   │   └── update.py      # 签到状态更新(预留功能)
-│   └── task/              # 任务和测验管理
-│       └── query.py       # 任务和成绩查询
-├── types/                 # 类型定义
-│   └── types.py           # Pydantic模型和枚举
-└── utils/                 # 工具函数
-    └── response.py        # 统一响应处理
+```text
+xiaoya-teacher-mcp-server/
+├── pyproject.toml         # 打包配置
+├── README.md              # 项目文档
+├── hatch_build.py         # Hatchling 打包钩子
+├── src/
+│   └── xiaoya_teacher_mcp_server/
+│       ├── config.py              # 配置文件和认证模块
+│       ├── field_descriptions.py  # MCP 字段描述常量
+│       ├── main.py                # 服务器入口和传输协议处理
+│       ├── tools/                 # 核心工具模块
+│       │   ├── questions/         # 题目管理工具
+│       │   ├── resources/         # 资源管理工具
+│       │   ├── group/             # 班级和签到查询
+│       │   └── task/              # 任务和测验管理
+│       ├── types/                 # 类型定义
+│       │   ├── enums.py           # 通用枚举
+│       │   ├── question_models.py # 题目相关模型
+│       │   ├── resource_models.py # 资源相关模型
+│       │   └── task_models.py     # 班课相关模型
+│       └── utils/                 # 公共工具函数
+│           ├── client.py          # 统一 HTTP 客户端与自动重登
+│           ├── logging.py         # 统一日志
+│           ├── response.py        # 统一响应处理
+│           └── rich_text.py       # 纯文本与 raw 富文本转换
+└── tests/                  # 回归测试
 ```
 
 ### 核心模块说明
@@ -239,21 +258,20 @@ xiaoya_teacher_mcp_server/
 #### 🎯 题目管理模块
 - **create.py** - 完整支持7种题型的创建, 包括复杂的编程题设置
 - **update.py** - 题目内容更新、答案修改、选项管理
-- **query.py** - 题目查询、试卷分析、学生答题详情
+- **query.py** - 默认返回试卷摘要, 按需返回完整明细
 - **delete.py** - 题目和答案项的删除操作
 
 #### 📁 资源管理模块
 - **create.py** - 多类型资源创建(文件夹、笔记、思维导图等)
 - **update.py** - 资源重命名、移动、排序、权限设置
-- **query.py** - 资源树形查询、层级结构展示、文件下载、markdown格式转换
+- **query.py** - 默认返回资源摘要, 支持文件夹局部快照、文件下载、markdown格式转换
 - **delete.py** - 资源文件的删除操作
 
 #### 👥 班级管理模块
-- **query.py** - 班级列表、签到记录、学生详情查询
-- **update.py** - 签到状态更新(预留功能)
+- **query.py** - 班级列表、签到记录、课程组总览查询
 
 #### 📋 任务管理模块
-- **query.py** - 任务列表、学生成绩、答题详情查询
+- **query.py** - 默认返回任务和答题摘要, 按需返回完整答卷明细
 
 ## 🔧 技术栈
 

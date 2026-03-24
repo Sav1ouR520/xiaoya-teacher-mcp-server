@@ -1,36 +1,40 @@
 """题目删除 MCP 工具"""
 
-import requests
 from typing import Annotated
+
 from pydantic import Field
 
+from ... import field_descriptions as desc
+from ...config import MAIN_URL, MCP
+from ...utils.client import APIRequestError, extract_response_message, post_json
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, headers, MCP
 
 
 @MCP.tool()
 def delete_questions(
-    paper_id: Annotated[str, Field(description="试卷ID")],
-    question_ids: Annotated[list[str], Field(description="要删除的题目id列表")],
+    paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
+    question_ids: Annotated[list[str], Field(description=desc.QUESTION_ID_LIST_DESC)],
 ) -> dict:
     """从试卷中批量删除题目"""
     url = f"{MAIN_URL}/survey/delQuestion"
     failed_ids, success_ids = [], []
     for question_id in question_ids:
         try:
-            response = requests.post(
+            response = post_json(
                 url,
-                json={"paper_id": str(paper_id), "question_id": str(question_id)},
-                headers=headers(),
+                payload={"paper_id": str(paper_id), "question_id": str(question_id)},
             )
-
-            response = response.json()
             if response.get("success"):
                 success_ids.append(question_id)
             else:
-                failed_ids.append(question_id)
-        except Exception:
-            failed_ids.append(question_id)
+                failed_ids.append(
+                    {
+                        "question_id": question_id,
+                        "message": extract_response_message(response),
+                    }
+                )
+        except APIRequestError as exc:
+            failed_ids.append({"question_id": question_id, "message": str(exc)})
     return ResponseUtil.success(
         {"success_ids": success_ids, "failed_ids": failed_ids},
         f"题目批量删除完成:成功{len(success_ids)}个,失败{len(failed_ids)}个",
@@ -39,27 +43,22 @@ def delete_questions(
 
 @MCP.tool()
 def delete_answer_item(
-    paper_id: Annotated[str, Field(description="试卷id")],
-    question_id: Annotated[str, Field(description="题目id")],
-    answer_item_id: Annotated[str, Field(description="选项id")],
+    paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
+    question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
+    answer_item_id: Annotated[str, Field(description=desc.OPTION_ID_DESC)],
 ) -> dict:
     """删除题目的某个选项"""
     try:
-        url = f"{MAIN_URL}/survey/delAnswerItem"
-        response = requests.post(
-            url,
-            json={
+        response = post_json(
+            f"{MAIN_URL}/survey/delAnswerItem",
+            payload={
                 "paper_id": str(paper_id),
                 "question_id": str(question_id),
                 "answer_item_id": str(answer_item_id),
             },
-            headers=headers(),
-        ).json()
+        )
         if response.get("success"):
             return ResponseUtil.success(None, "选项删除成功")
-        else:
-            return ResponseUtil.error(
-                response.get("msg") or response.get("message") or "未知错误"
-            )
-    except Exception as e:
+        return ResponseUtil.error(extract_response_message(response))
+    except APIRequestError as e:
         return ResponseUtil.error("删除题目选项时发生异常", e)
