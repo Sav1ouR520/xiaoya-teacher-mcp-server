@@ -71,9 +71,8 @@ def auth_status(refresh: bool = False) -> Dict[str, Any]:
             account = state.request_account.get()
             source = "header" if token else None
             if refresh and account and (pwd := state.request_password.get()):
-                new = cfg.resolve_request_token(account=account, password=pwd)
+                new = cfg.refresh_active_token()
                 if new:
-                    state.request_token.set(new)
                     token = new
                     replaced = True
                     source = "provided"

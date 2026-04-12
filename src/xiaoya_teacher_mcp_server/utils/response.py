@@ -70,7 +70,12 @@ class ResponseUtil:
         }
 
     @staticmethod
-    def error(message: str = "操作失败", exception: Exception = None) -> Dict[str, Any]:
+    def error(
+        message: str = "操作失败",
+        exception: Exception = None,
+        *,
+        data: Any = None,
+    ) -> Dict[str, Any]:
         """创建错误响应,仅返回必要错误信息,避免泄露内部堆栈。"""
         if exception is not None and isinstance(exception, Exception):
             detail = str(exception).strip()
@@ -83,6 +88,6 @@ class ResponseUtil:
         return {
             "message": message,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "data": None,
+            "data": normalize_time_fields(data) if data is not None else data,
             "success": False,
         }

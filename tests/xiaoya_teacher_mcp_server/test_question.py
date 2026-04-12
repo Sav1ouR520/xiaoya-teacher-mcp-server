@@ -22,6 +22,7 @@ from xiaoya_teacher_mcp_server.types import (
     FillBlankAnswer,
     FillBlankQuestion,
     MultipleChoiceQuestionData,
+    ProgramSetting,
     ProgramSettingAllNeed,
     ProgrammingLanguage,
     QuestionOption,
@@ -213,7 +214,7 @@ def test_batch_update_sort_and_delete():
         assert len(question_ids) == len(questions)
 
         first_question = all_questions[0]
-        answer_item_ids = [item["id"] for item in first_question["options"]]
+        answer_item_ids = [item["answer_item_id"] for item in first_question["options"]]
         move_result = update.move_answer_item(
             question_ids[0], list(reversed(answer_item_ids))
         )
@@ -224,7 +225,7 @@ def test_batch_update_sort_and_delete():
         update_cases_result = update.update_code_test_cases(
             question_id=code_question["id"],
             program_setting_id=code_question["program_setting"]["id"],
-            answer_item_id=code_question["options"][0]["id"],
+            answer_item_id=code_question["options"][0]["answer_item_id"],
             answer_language=ProgrammingLanguage.PYTHON3,
             code_answer="a, b = map(int, input().split())\nprint(a + b)",
             in_cases=[{"in": "1 2"}, {"in": "3 5"}],
@@ -350,6 +351,95 @@ def test_update_question_options_accepts_string_id_and_text(monkeypatch):
     assert captured["payload"]["answer_item_id"] == "answer-1"
     assert captured["payload"]["answer_checked"] == 2
     assert json.loads(captured["payload"]["value"])["blocks"][0]["text"] == "更新后的选项"
+
+
+def test_update_question_validates_code_cases_before_remote_update(monkeypatch):
+    called = False
+
+    def fake_post_update_question(**payload):
+        nonlocal called
+        called = True
+        return payload
+
+    monkeypatch.setattr(update, "_post_update_question", fake_post_update_question)
+
+    result = update.update_question(
+        question_id="question-1",
+        program_setting=ProgramSetting(
+            code_answer="print(input())",
+            answer_language=ProgrammingLanguage.PYTHON3,
+            in_cases=[{"in": "hello"}],
+        ),
+    )
+
+    assert not result["success"]
+    assert called is False
+    assert "answer_item_id" in result["message"]
+
+
+def test_batch_create_questions_marks_partial_failure(monkeypatch):
+    questions = [
+        ChoiceQuestion(
+            title="成功题",
+            description="desc",
+            options=[
+                QuestionOption(text="A", answer=True),
+                QuestionOption(text="B", answer=False),
+                QuestionOption(text="C", answer=False),
+                QuestionOption(text="D", answer=False),
+            ],
+            score=5,
+        ),
+        ChoiceQuestion(
+            title="失败题",
+            description="desc",
+            options=[
+                QuestionOption(text="A", answer=True),
+                QuestionOption(text="B", answer=False),
+                QuestionOption(text="C", answer=False),
+                QuestionOption(text="D", answer=False),
+            ],
+            score=5,
+        ),
+    ]
+
+    calls = {"count": 0}
+
+    def fake_create_choice_question(**kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"success": True, "data": {"id": "question-1"}}
+        return {"success": False, "message": "模拟失败"}
+
+    monkeypatch.setattr(create, "_create_choice_question", fake_create_choice_question)
+
+    result = create.batch_create_questions("paper-1", questions)
+
+    assert not result["success"]
+    assert result["data"]["success_count"] == 1
+    assert result["data"]["failed_count"] == 1
+    assert result["data"]["partial_success"] is True
+    assert result["data"]["failed_items"] == [
+        {"index": 2, "type": "单选题", "title": "失败题", "message": "模拟失败"}
+    ]
+
+
+def test_delete_questions_returns_failed_items(monkeypatch):
+    def fake_post_json(url, *, payload=None, timeout=20, allow_http_error=False):
+        if payload["question_id"] == "q1":
+            return {"success": True, "data": None}
+        return {"success": False, "message": "不存在"}
+
+    monkeypatch.setattr(delete, "post_json", fake_post_json)
+
+    result = delete.delete_questions("paper-1", ["q1", "q2"])
+
+    assert not result["success"]
+    assert result["data"]["success_count"] == 1
+    assert result["data"]["failed_count"] == 1
+    assert result["data"]["partial_success"] is True
+    assert result["data"]["success_ids"] == ["q1"]
+    assert result["data"]["failed_items"] == [{"question_id": "q2", "message": "不存在"}]
 
 
 def test_parse_question_fill_blank_fields_are_mapped_correctly():

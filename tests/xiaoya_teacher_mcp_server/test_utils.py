@@ -83,6 +83,26 @@ def test_request_json_refreshes_and_retries_on_http_401(monkeypatch):
     assert calls["count"] == 2
 
 
+def test_request_response_refreshes_and_retries_on_http_401(monkeypatch):
+    calls = {"count": 0}
+
+    monkeypatch.setattr(client, "headers", lambda: {})
+    monkeypatch.setattr(client, "refresh_active_token", lambda: "Bearer refreshed")
+
+    def fake_request(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return DummyResponse(status_code=401, json_data={"success": False})
+        return DummyResponse(status_code=200, json_data={"success": True})
+
+    monkeypatch.setattr(client.requests, "request", fake_request)
+
+    result = client.request_response("GET", "https://example.com")
+
+    assert result.status_code == 200
+    assert calls["count"] == 2
+
+
 def test_request_json_refreshes_and_retries_on_business_auth_error(monkeypatch):
     calls = {"count": 0}
 
@@ -139,15 +159,25 @@ def test_response_error_returns_compact_message():
     assert "Traceback" not in result["message"]
 
 
+def test_response_error_can_include_data():
+    result = ResponseUtil.error(
+        "批量操作部分失败",
+        data={"failed_items": [{"question_id": "q1", "message": "not found"}]},
+    )
+
+    assert not result["success"]
+    assert result["data"]["failed_items"] == [{"question_id": "q1", "message": "not found"}]
+
+
 def test_fill_blank_validation_runs_before_remote_creation(monkeypatch):
     called = False
 
-    def fake_initialize_question(*args, **kwargs):
+    def fake_create_question_data(*args, **kwargs):
         nonlocal called
         called = True
         raise AssertionError("should not be called")
 
-    monkeypatch.setattr(create, "initialize_question", fake_initialize_question)
+    monkeypatch.setattr(create, "create_question_data", fake_create_question_data)
 
     result = create.create_fill_blank_question(
         "paper-1",

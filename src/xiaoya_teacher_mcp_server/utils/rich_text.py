@@ -1,4 +1,4 @@
-"""Helpers for XiaoYa rich text conversion."""
+"""小雅富文本转换工具。"""
 
 from __future__ import annotations
 

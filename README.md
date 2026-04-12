@@ -1,11 +1,11 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.3.1-blue)
+![版本](https://img.shields.io/badge/版本-1.3.2-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
 
-专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、题目创建、班级查询、签到统计和任务测验等能力。
+专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、题目创建、试卷配置、班级查询、签到统计、任务测验与批阅等能力。
 
 默认安装采用精简依赖，适合本地 editable、`uv tool` 和标准发布包；如需完整文档格式转换能力，可额外安装 `full` extra。
 
@@ -21,7 +21,7 @@
 - **7种题型支持** - 单选题、多选题、填空题、判断题、简答题、附件题、编程题
 - **富文本编辑** - 支持题目描述的富文本格式(粗体、斜体、下划线、代码块等)
 - **智能评分** - 填空题支持多种自动评分策略(精确匹配、部分匹配、有序/无序)
-- **批量操作** - 支持批量创建题目、导入导出题目、题目排序调整
+- **批量操作** - 支持批量创建题目、官方导入题目、题目排序调整
 
 ### 📁 资源管理系统
 - **多类型资源** - 文件夹、笔记、思维导图、文件、作业、教学设计
@@ -35,7 +35,7 @@
 - **数据统计** - 出勤率分析、签到趋势
 
 ### 📋 任务与测验
-- **任务发布** - 查询课程组任务列表、任务详情
+- **任务查询** - 查询课程组已发布任务列表、任务详情
 - **成绩管理** - 学生答题情况统计、成绩分析
 - **答题分析** - 学生答题详情预览、题目解析
 - **AI 批阅** - 逐题打分、批注、提交批改，支持附件答案（图片/PDF/文件）查看
@@ -80,7 +80,7 @@ uv tool install -e --reinstall .
 
 ### 认证配置
 
-服务器支持两种认证方式,均支持本地和远程自动登录与缓存：
+服务器支持两种认证方式,本地(stdio)与远程(SSE/HTTP)均可使用。账号密码模式支持自动登录和 token 缓存；Bearer Token 模式只使用调用方提供的 token。
 
 #### 方式一：账号密码自动登录(推荐,支持多账号远程缓存)
 本地(stdio)和远程(SSE/HTTP)均可通过账号密码自动登录,token 会自动缓存,远程多账号也会自动保存。若请求过程中检测到认证过期,服务端会自动重新登录一次并重试当前请求.
@@ -188,7 +188,7 @@ Authorization: Bearer your_bearer_token
         "MCP_TRANSPORT": "sse,streamable-http",
         "MCP_MOUNT_PATH": "/mcp",
         "MCP_HOST": "0.0.0.0",
-        "MCP_PORT": "8000",
+        "MCP_PORT": "8000"
       }
     }
   }
@@ -223,6 +223,32 @@ Authorization: Bearer your_bearer_token
 2. **配置环境变量** - 在MCP客户端配置文件中设置相应的环境变量
 3. **集成到AI助手** - 在Claude Desktop、Cursor等支持MCP的AI助手中使用
 4. **开始教学管理** - 直接与AI对话, 完成题库管理、资源整理、班级管理等任务
+
+### 常用流程与能力边界
+
+#### 出题/组卷
+
+- 试卷通常对应课程资源中的 `ASSIGNMENT` 作业资源。新建试卷时先用 `query_course_resources_summary` 定位目标文件夹，再用 `create_course_resource(type=ASSIGNMENT)` 创建资源并取得 `paper_id`。
+- 修改已有试卷时，优先从 `query_course_resources_summary` 或 `query_course_resources` 中查找带 `paper_id` 的作业资源，再用 `query_paper_summary` 查看题数、题型和总分。
+- `query_group_tasks` 面向已发布任务，主要提供 `paper_id` 和 `publish_id` 给批阅/答题统计流程使用，不负责筛选未发布试卷。
+- 当前没有单独的“自动生成试卷标题”工具。需要个性化标题时，建议让 AI 先给出候选标题，经老师确认后作为 `create_course_resource` 的资源名称。
+
+#### 批阅/成绩
+
+- 先用 `query_group_tasks` 选择已发布任务，再调用 `query_test_result` 获取提交人数、未提交人数、平均分和学生答题记录。
+- 查看单个学生答卷使用 `query_preview_student_paper`；需要完整答案内容时设置 `detail_level=full`。
+- 主观题评分流程为 `grade_student_question` 逐题打分，最后用 `submit_student_mark` 提交整卷批阅。选择题、判断题、自动评分填空题一般沿用系统判分。
+- 附件答案可用 `get_answer_file` 获取 base64 内容；图片/PDF/小文件更适合直接读取，视频或大文件建议谨慎调用，避免返回过大的内容。
+
+#### 编程题
+
+- `create_code_question` 的 `program_setting.in_cases` 只需要提供输入，格式为 `[{"in": "输入内容"}]`。
+- 平台会根据参考答案代码运行生成期望输出，不需要在 `in_cases` 里手写 `out` 字段。
+- `description` 用于解析或补充说明，参考答案代码请放在 `program_setting.code_answer`。
+
+#### 批量操作
+
+- 批量创建、批量删除和资源批量更新只有全部成功时顶层 `success=true`；部分失败时 `success=false`，但 `data.failed_items` 会列出未创建/未删除/未更新的条目及原因，`data.success_ids` 会保留已成功的 ID。
 
 ## 🏗️ 项目架构
 

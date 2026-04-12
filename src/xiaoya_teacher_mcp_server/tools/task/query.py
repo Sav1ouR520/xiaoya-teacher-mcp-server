@@ -41,7 +41,7 @@ def _query_payload(
     try:
         data = expect_success(get_json(url, params=params))
         return ResponseUtil.success(builder(data) if builder else data, success_message)
-    except APIRequestError as e:
+    except (APIRequestError, ValueError) as e:
         return ResponseUtil.error(error_message, e)
 
 
@@ -56,12 +56,15 @@ def _build_group_tasks(group_id: str, detail_level: str = "summary") -> dict:
             )
             if not is_assignment:
                 continue
-            for link_task in task_folder.get("link_tasks") or []:
+            for link_task in task_folder.get("link_tasks", []):
+                publish_id = link_task.get("publish_id")
+                if not publish_id:
+                    continue
                 task = {
-                    "resource_id": task_folder["id"],
-                    "name": task_folder["name"],
-                    "paper_id": task_folder["paper_id"],
-                    "publish_id": link_task["publish_id"],
+                    "resource_id": task_folder.get("id"),
+                    "name": task_folder.get("name"),
+                    "paper_id": task_folder.get("paper_id"),
+                    "publish_id": publish_id,
                 }
                 if detail_level == "full":
                     task.update(
@@ -76,18 +79,18 @@ def _build_group_tasks(group_id: str, detail_level: str = "summary") -> dict:
         return ResponseUtil.success(
             flattened_tasks, f"课程测试/考试/任务查询成功,共{len(flattened_tasks)}项"
         )
-    except APIRequestError as e:
+    except (APIRequestError, ValueError) as e:
         return ResponseUtil.error("课程测试/考试/任务查询失败", e)
 
 
 def _build_test_result_record(record: dict[str, Any], detail_level: str) -> dict[str, Any]:
     summary = {
-        "record_id": record["id"],
-        "actual_score": record["actual_score"],
-        "nickname": record["nickname"],
-        "student_number": record["student_number"],
-        "class_name": record["class_name"],
-        "status": AnswerStatus.get(record["status"]),
+        "record_id": record.get("id"),
+        "actual_score": record.get("actual_score"),
+        "nickname": record.get("nickname"),
+        "student_number": record.get("student_number"),
+        "class_name": record.get("class_name"),
+        "status": AnswerStatus.get(record.get("status")),
     }
     if detail_level == "full":
         summary.update(
@@ -103,12 +106,9 @@ def _build_test_result_record(record: dict[str, Any], detail_level: str) -> dict
 
 def _build_test_result_payload(data: dict[str, Any], detail_level: str) -> dict[str, Any]:
     raw_records = data.get("answer_records", [])
-    answer_records = [
-        _build_test_result_record(record, detail_level) for record in raw_records
-    ]
-    submitted_count = sum(
-        1 for record in raw_records if record.get("status") == AnswerStatus.SUBMITTED
-    )
+    lost_members = data.get("lost_members", [])
+    answer_records = [_build_test_result_record(record, detail_level) for record in raw_records]
+    submitted_count = sum(1 for record in raw_records if record.get("status") == AnswerStatus.SUBMITTED)
     total_score = sum(_safe_score(record.get("actual_score")) for record in raw_records)
     record_count = len(answer_records)
 
@@ -117,7 +117,7 @@ def _build_test_result_payload(data: dict[str, Any], detail_level: str) -> dict[
         "record_count": record_count,
         "submitted_count": submitted_count,
         "in_progress_count": max(record_count - submitted_count, 0),
-        "lost_member_count": len(data.get("lost_members", [])),
+        "lost_member_count": len(lost_members),
         "average_score": round(total_score / record_count, 2) if record_count else 0,
         "answer_records": answer_records,
     }
@@ -125,7 +125,7 @@ def _build_test_result_payload(data: dict[str, Any], detail_level: str) -> dict[
         keep_keys = ["class_id", "class_name", "nickname", "student_number"]
         payload["lost_members"] = [
             {key: member[key] for key in keep_keys if key in member}
-            for member in data.get("lost_members", [])
+            for member in lost_members
         ]
     return payload
 
@@ -157,12 +157,20 @@ def _build_preview_question(
     parse_mode: str,
     detail_level: str,
 ) -> dict[str, Any]:
-    user_answer = answer.get("answer_items") or answer.get("answer", "")
+    _choice_types = {
+        QuestionType.SINGLE_CHOICE.value,
+        QuestionType.MULTIPLE_CHOICE.value,
+        QuestionType.FILL_BLANK.value,
+        QuestionType.TRUE_FALSE.value,
+    }
+    question_type = question.get("type")
+    is_choice = question_type in _choice_types
+    user_answer = answer.get("answer_items", []) if is_choice else answer.get("answer", "")
     question_data = {
-        "id": question["id"],
-        "title": render_rich_text_output(question["title"], parse_mode),
-        "type": QuestionType.get(question["type"]),
-        "score": question["score"],
+        "id": question.get("id"),
+        "title": render_rich_text_output(question.get("title", ""), parse_mode),
+        "type": QuestionType.get(question_type),
+        "score": question.get("score"),
         "user_score": answer.get("score", 0),
         "has_answer": bool(user_answer),
         "answer_id": mark_answer.get("answer_id") if mark_answer else None,
@@ -170,23 +178,22 @@ def _build_preview_question(
     }
     if detail_level == "full":
         question_data["description"] = render_rich_text_output(
-            question["description"], parse_mode
+            question.get("description", ""), parse_mode
         )
         question_data["user"] = {
-            "answer": render_rich_text_output(user_answer, parse_mode),
-            "score": answer.get("score", 0),
+            "answer": user_answer if is_choice else render_rich_text_output(user_answer, parse_mode),
         }
         if question.get("answer_items"):
             question_data["options"] = parse_answer_items(
-                question["answer_items"], question["type"], parse_mode
+                question["answer_items"], question_type, parse_mode
             )
-        if question["type"] == QuestionType.CODE.value:
+        if question_type == QuestionType.CODE.value:
             question_data["program_setting"] = question.get("program_setting")
             raw_info = render_rich_text_output(answer.get("info"), "raw")
             question_data["user"]["test_case_info"] = (
                 raw_info.get("data", []) if isinstance(raw_info, dict) else []
             )
-        if question["type"] == QuestionType.ATTACHMENT.value:
+        if question_type == QuestionType.ATTACHMENT.value:
             question_data["attachments"] = _extract_attachments(answer.get("answer", ""))
     return question_data
 
@@ -197,29 +204,35 @@ def _build_preview_payload(
     parse_mode: str,
     detail_level: str,
 ) -> dict[str, Any]:
-    answers = response_data["answer_record"]["answers"]
-    answer_map = {answer["question_id"]: answer for answer in answers}
+    answer_record = response_data.get("answer_record", {})
+    answers = answer_record.get("answers", [])
+    answer_map = {
+        answer["question_id"]: answer
+        for answer in answers
+        if answer.get("question_id")
+    }
 
-    mark_records = response_data.get("mark_records") or []
+    mark_records = response_data.get("mark_records", [])
     mark_record = mark_records[0] if mark_records else {}
     mark_paper_record_id = mark_record.get("id")
     mark_answers_map = {
         ma["question_id"]: ma
-        for ma in (mark_record.get("mark_answers") or [])
+        for ma in mark_record.get("mark_answers", [])
+        if ma.get("question_id")
     }
 
     questions = [
         _build_preview_question(
             question,
-            answer_map[question["id"]],
-            mark_answers_map.get(question["id"]),
+            answer_map.get(question.get("id"), {}),
+            mark_answers_map.get(question.get("id")),
             parse_mode=parse_mode,
             detail_level=detail_level,
         )
-        for question in response_data["questions"]
+        for question in response_data.get("questions", [])
     ]
     return {
-        "record_id": response_data["answer_record"].get("id"),
+        "record_id": answer_record.get("id"),
         "mark_paper_record_id": mark_paper_record_id,
         "question_count": len(questions),
         "earned_score": sum(_safe_score(answer.get("score")) for answer in answers),
@@ -277,7 +290,7 @@ def query_test_result(
         Field(description=desc.ANSWER_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"),
     ] = "summary",
 ) -> dict:
-    """查询学生的测试/考试/任务的答题情况(包含mark_mode_id)"""
+    """[批改第1步] 查询所有学生的答题情况，返回 mark_mode_id（后续批改必需）和每位学生的 record_id"""
     return _query_payload(
         url=f"{MAIN_URL}/survey/course/queryStuAnswerList/v2",
         params={
@@ -307,7 +320,7 @@ def query_preview_student_paper(
         Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$"),
     ] = "plain",
 ) -> dict:
-    """查询学生答题信息(部分id通过query_test_result获取)"""
+    """[批改第2步] 查询单个学生的完整答题内容，返回 mark_paper_record_id 和每道题的 answer_id（打分必需）"""
     return _query_payload(
         url=f"{MAIN_URL}/survey/course/queryMarkRecord",
         params={

@@ -141,8 +141,8 @@ class OfficeCodeSetting(BaseModel):
     cases: list[Case_Type] = Field(
         description=desc.TEST_CASE_LIST_DESC, default_factory=list
     )
-    max_memory: int = Field(description=desc.MAX_MEMORY_DESC, default=5000, gt=0)
-    max_time: int = Field(description=desc.MAX_TIME_DESC, default=1000, gt=0)
+    max_memory: int = Field(description=desc.PROGRAM_MAX_MEMORY_DESC, default=5000, gt=0)
+    max_time: int = Field(description=desc.PROGRAM_MAX_TIME_DESC, default=1000, gt=0)
     debug: AllowTrialRun = Field(ge=1, le=2, default=2)
     debug_count: int = Field(
         description=desc.DEBUG_COUNT_DESC, ge=0, le=9999, default=9999
@@ -243,52 +243,51 @@ class ProgramSettingBase(BaseModel):
     )
 
 
-class ProgramSetting(ProgramSettingBase):
-    """编程题配置"""
+_PROGRAM_FIELDS = dict(
+    max_memory=desc.PROGRAM_MAX_MEMORY_DESC,
+    max_time=desc.PROGRAM_MAX_TIME_DESC,
+    debug_count=desc.DEBUG_COUNT_DESC,
+    code_answer=desc.CODE_ANSWER_DESC,
+    in_cases=desc.IN_CASES_DESC,
+)
 
-    max_memory: Optional[int] = Field(
-        description=desc.PROGRAM_MAX_MEMORY_DESC, gt=0, default=None
-    )
-    max_time: Optional[int] = Field(
-        description=desc.PROGRAM_MAX_TIME_DESC, gt=0, default=None
-    )
+
+class ProgramSetting(ProgramSettingBase):
+    """编程题配置（更新用，所有字段可选）"""
+
+    max_memory: Optional[int] = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=None)
+    max_time: Optional[int] = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=None)
     debug: Optional[AllowTrialRun] = Field(ge=1, le=2, default=None)
-    debug_count: Optional[int] = Field(
-        description=desc.DEBUG_COUNT_DESC, ge=0, le=9999, default=None
-    )
+    debug_count: Optional[int] = Field(description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=None)
     runcase: Optional[AllowTrialRun] = Field(ge=1, le=2, default=None)
     runcase_count: Optional[int] = Field(ge=0, le=100, default=None)
-    language: Optional[list[ProgrammingLanguage]] = Field(
-        default_factory=list, min_length=1
-    )
+    language: Optional[list[ProgrammingLanguage]] = Field(default_factory=list, min_length=1)
     answer_language: Optional[ProgrammingLanguage] = Field(default=None)
-    code_answer: Optional[str] = Field(description=desc.CODE_ANSWER_DESC, default=None)
-    in_cases: Optional[list[dict[str, str]]] = Field(
-        description=desc.IN_CASES_DESC, default_factory=list, min_length=1
-    )
+    code_answer: Optional[str] = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
+    in_cases: Optional[list[dict[str, str]]] = Field(description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1)
 
 
 class ProgramSettingAllNeed(ProgramSettingBase):
-    """编程题配置"""
+    """编程题配置（创建用，带默认值）"""
 
-    max_memory: int = Field(description=desc.PROGRAM_MAX_MEMORY_DESC, gt=0, default=1000)
-    max_time: int = Field(description=desc.PROGRAM_MAX_TIME_DESC, gt=0, default=1000)
+    max_memory: int = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=1000)
+    max_time: int = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=1000)
     debug: AllowTrialRun = Field(ge=1, le=2, default=2)
-    debug_count: int = Field(
-        description=desc.DEBUG_COUNT_DESC, ge=0, le=9999, default=9999
-    )
+    debug_count: int = Field(description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=9999)
     runcase: AllowTrialRun = Field(ge=1, le=2, default=2)
     runcase_count: int = Field(ge=0, le=100, default=100)
     language: list[ProgrammingLanguage] = Field(default_factory=list, min_length=1)
     answer_language: Optional[ProgrammingLanguage] = Field(default=None)
-    code_answer: Optional[str] = Field(description=desc.CODE_ANSWER_DESC, default=None)
-    in_cases: list[dict[str, str]] = Field(
-        description=desc.IN_CASES_DESC, default_factory=list, min_length=1
-    )
+    code_answer: Optional[str] = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
+    in_cases: list[dict[str, str]] = Field(description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1)
 
 
 class CodeQuestion(QuestionBase):
     """编程题"""
 
     type: Literal[QuestionType.CODE] = QuestionType.CODE
+    description: str = Field(
+        description=desc.ANSWER_EXPLANATION_DESC,
+        min_length=1,
+    )
     program_setting: ProgramSettingAllNeed = Field(description=desc.PROGRAM_SETTING_DESC)

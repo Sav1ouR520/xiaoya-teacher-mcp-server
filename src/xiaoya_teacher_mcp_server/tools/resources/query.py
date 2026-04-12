@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 from urllib.parse import quote
 
-import requests
 from markitdown import MarkItDown
 from pydantic import Field
 
@@ -17,6 +16,7 @@ from ...utils.client import (
     APIRequestError,
     expect_success,
     get_json,
+    request_response,
 )
 from ...utils.response import ResponseUtil
 from .normalize import build_resource_map, build_resource_tree
@@ -45,7 +45,7 @@ def _load_course_resource_map(
 
 
 def _sort_position_map(items: list[dict]) -> dict[str, int]:
-    return {item["id"]: item.get("sort_position", 0) for item in items}
+    return {item["id"]: item.get("sort_position", 0) for item in items if "id" in item}
 
 
 def _get_download_url(paper_id: str, filename: str) -> str:
@@ -62,10 +62,8 @@ def _get_download_url(paper_id: str, filename: str) -> str:
 
 def _fetch_download_response(
     paper_id: str, filename: str, *, stream: bool = False
-) -> requests.Response:
-    response = requests.get(_get_download_url(paper_id, filename), stream=stream, timeout=20)
-    response.raise_for_status()
-    return response
+):
+    return request_response("GET", _get_download_url(paper_id, filename), stream=stream, timeout=20)
 
 
 def _build_resource_summary_view(raw_data: list[dict[str, Any]], view_mode: str) -> Any:
@@ -232,11 +230,11 @@ def download_file(
             {
                 "filename": filename,
                 "file_path": file_path,
-                "content_type": download_response.headers["Content-Type"],
+                    "content_type": download_response.headers.get("Content-Type", ""),
             },
             f"文件下载成功: {file_path}",
         )
-    except (APIRequestError, OSError, requests.RequestException) as e:
+    except (APIRequestError, OSError) as e:
         return ResponseUtil.error("文件下载时发生异常", e)
 
 
@@ -271,5 +269,5 @@ def read_file_by_markdown(
             )
 
         return ResponseUtil.error("请提供file_path或者同时提供paper_id和filename")
-    except (APIRequestError, OSError, requests.RequestException, ValueError) as e:
+    except (APIRequestError, OSError, ValueError) as e:
         return ResponseUtil.error("文件转换为markdown时发生异常", e)

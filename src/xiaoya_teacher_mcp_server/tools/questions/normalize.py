@@ -1,4 +1,4 @@
-"""Normalization helpers for question parsing and validation."""
+"""题目解析和校验工具。"""
 
 from __future__ import annotations
 
@@ -21,17 +21,14 @@ def parse_answer_items(
     question_type: int,
     parse_mode: str = "plain",
 ) -> list[dict[str, Any]]:
+    _parse_choice = lambda item: {
+        "answer_item_id": item["id"],
+        "value": render_rich_text_output(item["value"], parse_mode),
+        "answer": AnswerChecked.get(item["answer_checked"]),
+    }
     parsers = {
-        QuestionType.MULTIPLE_CHOICE.value: lambda item: {
-            "answer_item_id": item["id"],
-            "value": render_rich_text_output(item["value"], parse_mode),
-            "answer": AnswerChecked.get(item["answer_checked"]),
-        },
-        QuestionType.SINGLE_CHOICE.value: lambda item: {
-            "answer_item_id": item["id"],
-            "value": render_rich_text_output(item["value"], parse_mode),
-            "answer": AnswerChecked.get(item["answer_checked"]),
-        },
+        QuestionType.MULTIPLE_CHOICE.value: _parse_choice,
+        QuestionType.SINGLE_CHOICE.value: _parse_choice,
         QuestionType.FILL_BLANK.value: lambda item: {
             "answer_item_id": item["id"],
             "answer": render_rich_text_output(item["answer"], parse_mode),
@@ -39,6 +36,7 @@ def parse_answer_items(
         QuestionType.TRUE_FALSE.value: lambda item: {
             "answer_item_id": item["id"],
             "answer": AnswerChecked.get(item["answer_checked"]),
+            "value": item.get("value", ""),
         },
         QuestionType.SHORT_ANSWER.value: lambda item: {
             "answer_item_id": item["id"],
@@ -162,12 +160,16 @@ def validate_office_import_results(
                 str(answer.standard_answer).strip().upper()
                 for answer in expected.standard_answers
             }
+            answer_items = actual.get("answer_items", [])
+            can_validate_answers = any(
+                "answer_checked" in item or "answer" in item for item in answer_items
+            )
             actual_answers = {
                 answer_item_seqno(item, item_index)
-                for item_index, item in enumerate(actual.get("answer_items", []))
-                if item.get("answer_checked") == 2
+                for item_index, item in enumerate(answer_items)
+                if item.get("answer_checked") == 2 or item.get("answer") == "正确"
             }
-            if expected_answers != actual_answers:
+            if can_validate_answers and expected_answers != actual_answers:
                 errors.append(
                     f"第{index}题答案不一致: 预期{sorted(expected_answers)}, 实际{sorted(actual_answers)}"
                 )

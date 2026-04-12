@@ -1,4 +1,4 @@
-"""Normalization helpers for course resources."""
+"""课程资源解析工具。"""
 
 from __future__ import annotations
 
@@ -69,18 +69,15 @@ def normalize_resource_item(item: dict[str, Any], detail_level: str = "full") ->
 
 
 def _is_folder_resource(resource: dict[str, Any]) -> bool:
-    resource_type = resource.get("type")
-    return resource_type in (
-        ResourceType.FOLDER.value,
-        ResourceType.get(ResourceType.FOLDER.value),
-    )
+    resource_type = resource["type"]
+    return resource_type in (ResourceType.FOLDER.value, ResourceType.get(ResourceType.FOLDER.value))
 
 
 def build_file_path(resource_id: str, resource_map: dict[str, dict[str, Any]]) -> str:
     path = []
     current = resource_map.get(resource_id)
     while current:
-        path.append(current.get("name", ""))
+        path.append(current["name"])
         current = resource_map.get(current.get("parent_id"))
     return "/".join(reversed([part for part in path if part]))
 

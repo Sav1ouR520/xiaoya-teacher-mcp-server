@@ -1,4 +1,4 @@
-"""Shared HTTP helpers for XiaoYa API requests."""
+"""小雅 API 请求工具。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ LOGGER = get_logger("xiaoya_teacher_mcp_server.http")
 
 
 class APIRequestError(RuntimeError):
-    """Raised when an API request fails or returns an invalid response."""
+    """API 请求失败或返回异常响应。"""
 
 
 def extract_response_message(
@@ -61,40 +61,17 @@ def request_json(
     timeout: int = DEFAULT_TIMEOUT,
     allow_http_error: bool = False,
 ) -> dict[str, Any]:
-    response = None
     refreshed = False
 
     while True:
-        try:
-            response = requests.request(
-                method,
-                url,
-                headers=headers(),
-                params=params,
-                json=payload,
-                timeout=timeout,
-            )
-            if response.status_code == 401 and not refreshed:
-                new_token = refresh_active_token()
-                if new_token:
-                    refreshed = True
-                    LOGGER.info("检测到 401，已自动刷新认证并重试请求")
-                    continue
-
-            if not allow_http_error:
-                response.raise_for_status()
-        except requests.Timeout as exc:
-            raise APIRequestError("HTTP 请求超时") from exc
-        except requests.HTTPError as exc:
-            status_code = (
-                exc.response.status_code
-                if exc.response is not None
-                else (response.status_code if response is not None else "unknown")
-            )
-            raise APIRequestError(f"HTTP 请求失败: {status_code}") from exc
-        except requests.RequestException as exc:
-            raise APIRequestError(f"HTTP 请求失败: {exc.__class__.__name__}") from exc
-
+        response = request_response(
+            method,
+            url,
+            params=params,
+            payload=payload,
+            timeout=timeout,
+            allow_http_error=allow_http_error,
+        )
         parsed = _parse_json_response(response)
         if (
             not parsed.get("success")
@@ -107,6 +84,53 @@ def request_json(
                 LOGGER.info("检测到认证失效响应，已自动刷新认证并重试请求")
                 continue
         return parsed
+
+
+def request_response(
+    method: str,
+    url: str,
+    *,
+    params: Optional[dict[str, Any]] = None,
+    payload: Optional[dict[str, Any]] = None,
+    stream: bool = False,
+    timeout: int = DEFAULT_TIMEOUT,
+    allow_http_error: bool = False,
+) -> requests.Response:
+    response = None
+    refreshed = False
+
+    while True:
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers=headers(),
+                params=params,
+                json=payload,
+                stream=stream,
+                timeout=timeout,
+            )
+            if response.status_code == 401 and not refreshed:
+                new_token = refresh_active_token()
+                if new_token:
+                    refreshed = True
+                    LOGGER.info("检测到 401，已自动刷新认证并重试请求")
+                    continue
+
+            if not allow_http_error:
+                response.raise_for_status()
+            return response
+        except requests.Timeout as exc:
+            raise APIRequestError("HTTP 请求超时") from exc
+        except requests.HTTPError as exc:
+            status_code = (
+                exc.response.status_code
+                if exc.response is not None
+                else (response.status_code if response is not None else "unknown")
+            )
+            raise APIRequestError(f"HTTP 请求失败: {status_code}") from exc
+        except requests.RequestException as exc:
+            raise APIRequestError(f"HTTP 请求失败: {exc.__class__.__name__}") from exc
 
 
 def get_json(

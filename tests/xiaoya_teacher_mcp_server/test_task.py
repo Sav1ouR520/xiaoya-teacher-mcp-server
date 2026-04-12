@@ -46,16 +46,19 @@ def test_query_test_result_and_student_paper():
     if not records:
         return
 
-    record = records[-1]
+    record = next((item for item in reversed(records) if item["status"] == "已提交"), None)
+    if record is None:
+        pytest.skip("当前任务没有已提交答题卡，跳过学生答卷预览")
+
     paper_result = task_query.query_preview_student_paper(
         group_id,
         task["paper_id"],
-        data.get("mark_mode_id"),
+        data["mark_mode_id"],
         task["publish_id"],
         record["record_id"],
     )
-    assert paper_result.get("success")
-    print(f"2. ✓ 查询学生答卷成功: {record.get('nickname')} ({record.get('class_name')})")
+    assert paper_result["success"]
+    print(f"2. ✓ 查询学生答卷成功: {record['nickname']} ({record['class_name']})")
 
 
 def test_query_group_task_notices(monkeypatch):

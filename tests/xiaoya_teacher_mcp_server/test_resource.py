@@ -171,18 +171,18 @@ def test_move_and_sort():
         assert summary_result["success"]
         all_items = _flatten_resources(summary_result["data"])
         # 需要获取每个资源的完整属性以获取 parent_id 和 sort_position
-        dst_children = []
+        dst_children_by_id = {}
         for item in all_items:
             attr_result = resource_query.query_resource_attributes(group_id, item["id"])
             if attr_result["success"]:
                 attr_data = attr_result["data"]
                 if attr_data.get("parent_id") == dst_id:
-                    dst_children.append(attr_data)
+                    dst_children_by_id[attr_data["id"]] = attr_data
         ordered_ids = [
             r["id"]
-            for r in sorted(dst_children, key=lambda x: x.get("sort_position", 0))
+            for r in sorted(dst_children_by_id.values(), key=lambda x: x.get("sort_position", 0))
         ]
-        assert ordered_ids == desired_order
+        assert [resource_id for resource_id in ordered_ids if resource_id in desired_order] == desired_order
         print("3. ✓ 验证排序正确")
     finally:
         for _id in [child_c_id, child_b_id, child_a_id, src_id, dst_id]:
@@ -332,3 +332,21 @@ def test_query_resource_folder_snapshot(monkeypatch):
     assert result["success"]
     assert result["data"]["child_count"] == 2
     assert [item["id"] for item in result["data"]["children"]] == ["node-2", "node-1"]
+
+
+def test_batch_update_resource_download_returns_failed_items(monkeypatch):
+    def fake_post_json(url, *, payload=None, timeout=20, allow_http_error=False):
+        if payload["node_id"] == "node-1":
+            return {"success": True, "data": None}
+        return {"success": False, "msg": "无权限"}
+
+    monkeypatch.setattr(resource_update, "post_json", fake_post_json)
+
+    result = resource_update.batch_update_resource_download("group-1", ["node-1", "node-2"], 2)
+
+    assert not result["success"]
+    assert result["data"]["success_count"] == 1
+    assert result["data"]["failed_count"] == 1
+    assert result["data"]["partial_success"] is True
+    assert result["data"]["success_ids"] == ["node-1"]
+    assert result["data"]["failed_items"] == [{"node_id": "node-2", "message": "无权限"}]

@@ -1,12 +1,14 @@
 """题目删除 MCP 工具"""
 
+from __future__ import annotations
+
 from typing import Annotated
 
 from pydantic import Field
 
 from ... import field_descriptions as desc
 from ...config import MAIN_URL, MCP
-from ...utils.client import APIRequestError, extract_response_message, post_json
+from ...utils.client import APIRequestError, expect_success, extract_response_message, post_json
 from ...utils.response import ResponseUtil
 
 
@@ -17,28 +19,29 @@ def delete_questions(
 ) -> dict:
     """从试卷中批量删除题目"""
     url = f"{MAIN_URL}/survey/delQuestion"
-    failed_ids, success_ids = [], []
+    failed_items, success_ids = [], []
     for question_id in question_ids:
         try:
-            response = post_json(
-                url,
-                payload={"paper_id": str(paper_id), "question_id": str(question_id)},
-            )
-            if response.get("success"):
+            response = post_json(url, payload={"paper_id": str(paper_id), "question_id": str(question_id)})
+            if response["success"]:
                 success_ids.append(question_id)
             else:
-                failed_ids.append(
-                    {
-                        "question_id": question_id,
-                        "message": extract_response_message(response),
-                    }
-                )
+                failed_items.append({"question_id": question_id, "message": extract_response_message(response)})
         except APIRequestError as exc:
-            failed_ids.append({"question_id": question_id, "message": str(exc)})
-    return ResponseUtil.success(
-        {"success_ids": success_ids, "failed_ids": failed_ids},
-        f"题目批量删除完成:成功{len(success_ids)}个,失败{len(failed_ids)}个",
-    )
+            failed_items.append({"question_id": question_id, "message": str(exc)})
+
+    data = {
+        "success_count": len(success_ids),
+        "failed_count": len(failed_items),
+        "partial_success": bool(success_ids and failed_items),
+        "success_ids": success_ids,
+        "failed_items": failed_items,
+        "failed_ids": failed_items,
+    }
+    message = f"题目批量删除完成:成功{len(success_ids)}个,失败{len(failed_items)}个"
+    if failed_items:
+        return ResponseUtil.error(message, data=data)
+    return ResponseUtil.success(data, message)
 
 
 @MCP.tool()
@@ -49,16 +52,14 @@ def delete_answer_item(
 ) -> dict:
     """删除题目的某个选项"""
     try:
-        response = post_json(
+        expect_success(post_json(
             f"{MAIN_URL}/survey/delAnswerItem",
             payload={
                 "paper_id": str(paper_id),
                 "question_id": str(question_id),
                 "answer_item_id": str(answer_item_id),
             },
-        )
-        if response.get("success"):
-            return ResponseUtil.success(None, "选项删除成功")
-        return ResponseUtil.error(extract_response_message(response))
+        ))
+        return ResponseUtil.success(None, "选项删除成功")
     except APIRequestError as e:
         return ResponseUtil.error("删除题目选项时发生异常", e)

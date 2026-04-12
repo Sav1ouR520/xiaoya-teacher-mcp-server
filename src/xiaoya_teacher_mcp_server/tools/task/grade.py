@@ -5,12 +5,11 @@ from __future__ import annotations
 import base64
 from typing import Annotated
 
-import requests
 from pydantic import Field
 
 from ... import field_descriptions as desc
-from ...config import DOWNLOAD_URL, MAIN_URL, MCP, headers
-from ...utils.client import APIRequestError, expect_success, post_json
+from ...config import DOWNLOAD_URL, MAIN_URL, MCP
+from ...utils.client import APIRequestError, expect_success, post_json, request_response
 from ...utils.response import ResponseUtil
 
 
@@ -25,7 +24,12 @@ def grade_student_question(
     score: Annotated[float, Field(description=desc.CHECK_SCORE_DESC, ge=0)],
     comment: Annotated[str, Field(description=desc.CHECK_COMMENT_DESC, default="")] = "",
 ) -> dict:
-    """给学生某道题打分(部分id通过query_preview_student_paper获取)"""
+    """[批改第3步] 给学生某道题打分。完整批改流程：
+    1. query_test_result        → 获取 mark_mode_id、record_id
+    2. query_preview_student_paper → 获取 mark_paper_record_id、各题 answer_id
+    3. grade_student_question   → 对每道题逐一打分（本工具）
+    4. submit_student_mark      → 提交整卷批阅结果
+    注意：简答/附件题需要手动批改；选择题/填空/判断系统已自动评分，无需调用本工具。"""
     try:
         data = expect_success(
             post_json(
@@ -54,7 +58,7 @@ def submit_student_mark(
     mark_mode_id: Annotated[str, Field(description=desc.MARK_MODE_ID_DESC)],
     mark_paper_record_id: Annotated[str, Field(description=desc.MARK_PAPER_RECORD_ID_DESC)],
 ) -> dict:
-    """提交批阅(完成对某学生的整卷批改,需先用grade_student_question对各题打分)"""
+    """[批改第4步] 提交整卷批阅结果（必须在 grade_student_question 对所有题打分后调用，否则提交无效）"""
     try:
         data = expect_success(
             post_json(
@@ -78,12 +82,11 @@ def get_answer_file(
 ) -> dict:
     """获取学生答题附件内容(图片/PDF/文件等均支持),返回base64编码内容及MIME类型"""
     try:
-        resp = requests.get(
+        resp = request_response(
+            "GET",
             f"{DOWNLOAD_URL}/cloud/file_access/{quote_id}",
-            headers=headers(),
             timeout=30,
         )
-        resp.raise_for_status()
         mimetype = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
         return ResponseUtil.success(
             {
@@ -93,5 +96,5 @@ def get_answer_file(
             },
             "获取附件成功",
         )
-    except requests.RequestException as e:
+    except APIRequestError as e:
         return ResponseUtil.error("获取附件失败", e)
