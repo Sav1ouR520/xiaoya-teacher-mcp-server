@@ -15,3 +15,5 @@ wheels/
 
 # Git
 !.gitignore
+!.editorconfig
+!.github/
