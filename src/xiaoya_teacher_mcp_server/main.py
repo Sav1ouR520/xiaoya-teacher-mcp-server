@@ -3,8 +3,8 @@ import sys
 import threading
 
 import uvicorn
-from starlette.routing import Mount
 from starlette.applications import Starlette
+from starlette.routing import Mount
 
 from xiaoya_teacher_mcp_server import tools  # noqa: F401
 from xiaoya_teacher_mcp_server.config import MCP, request_context
@@ -54,9 +54,7 @@ def _start_transports(transports, mount_path):
                     {
                         "type": "http.response.start",
                         "status": 401,
-                        "headers": [
-                            (b"content-type", b"application/json; charset=utf-8")
-                        ],
+                        "headers": [(b"content-type", b"application/json; charset=utf-8")],
                     }
                 )
                 await send(
@@ -66,27 +64,11 @@ def _start_transports(transports, mount_path):
                     }
                 )
                 logger.warning(
-                    "Unauthorized %s request to %s over %s from %s:%s | Headers: %s"
-                    % (
-                        method,
-                        path,
-                        protocol,
-                        client[0],
-                        client[1],
-                        _mask_sensitive_headers(headers),
-                    )
+                    f"Unauthorized {method} request to {path} over {protocol} from {client[0]}:{client[1]} | Headers: {_mask_sensitive_headers(headers)}"
                 )
                 return
             logger.info(
-                "Accepted %s request to %s over %s from %s:%s | Headers: %s"
-                % (
-                    method,
-                    path,
-                    protocol,
-                    client[0],
-                    client[1],
-                    _mask_sensitive_headers(headers),
-                )
+                f"Accepted {method} request to {path} over {protocol} from {client[0]}:{client[1]} | Headers: {_mask_sensitive_headers(headers)}"
             )
             with request_context(
                 transport=transport,
@@ -100,9 +82,7 @@ def _start_transports(transports, mount_path):
 
     routes = []
     if "streamable-http" in other:
-        routes.append(
-            Mount("/", app=wrap(MCP.streamable_http_app(), "streamable-http"))
-        )
+        routes.append(Mount("/", app=wrap(MCP.streamable_http_app(), "streamable-http")))
     if "sse" in other:
         routes.append(Mount(mount_path, app=wrap(MCP.sse_app(), "sse")))
     if routes:
@@ -116,11 +96,7 @@ def _start_transports(transports, mount_path):
 
 def main():
     try:
-        raw = {
-            p.strip()
-            for p in os.getenv("MCP_TRANSPORT", "").lower().split(",")
-            if p.strip()
-        }
+        raw = {p.strip() for p in os.getenv("MCP_TRANSPORT", "").lower().split(",") if p.strip()}
         transports = raw & VALID
         invalid = raw - VALID
         if invalid:

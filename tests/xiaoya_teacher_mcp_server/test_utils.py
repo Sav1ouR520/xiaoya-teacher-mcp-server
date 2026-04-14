@@ -112,7 +112,9 @@ def test_request_json_refreshes_and_retries_on_business_auth_error(monkeypatch):
     def fake_request(*args, **kwargs):
         calls["count"] += 1
         if calls["count"] == 1:
-            return DummyResponse(status_code=200, json_data={"success": False, "message": "token expired"})
+            return DummyResponse(
+                status_code=200, json_data={"success": False, "message": "token expired"}
+            )
         return DummyResponse(status_code=200, json_data={"success": True, "data": {"ok": True}})
 
     monkeypatch.setattr(client.requests, "request", fake_request)
@@ -139,9 +141,7 @@ def test_rich_text_plain_raw_round_trip():
 def test_normalize_rich_text_input_prefers_raw():
     raw = {"blocks": [{"text": "raw title"}], "entityMap": {}}
 
-    assert json.loads(
-        rich_text.normalize_rich_text_input(text="plain title", raw=raw)
-    ) == raw
+    assert json.loads(rich_text.normalize_rich_text_input(text="plain title", raw=raw)) == raw
 
 
 def test_response_success_preserves_naive_iso_time_without_blind_offset():

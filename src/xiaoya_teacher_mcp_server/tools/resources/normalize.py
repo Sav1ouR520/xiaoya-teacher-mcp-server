@@ -47,9 +47,7 @@ def normalize_resource_item(item: dict[str, Any], detail_level: str = "full") ->
         if key in item
     }
     normalized["level"] = (
-        len(normalized.get("path", "").split("/")) - 1
-        if normalized.get("path")
-        else 0
+        len(normalized.get("path", "").split("/")) - 1 if normalized.get("path") else 0
     )
     normalized["type_name"] = ResourceType.get(item["type"], "unknown")
 
@@ -98,7 +96,9 @@ def build_resource_map(
     return resource_map
 
 
-def build_resource_tree(items: list[dict[str, Any]], detail_level: str = "summary") -> list[dict[str, Any]]:
+def build_resource_tree(
+    items: list[dict[str, Any]], detail_level: str = "summary"
+) -> list[dict[str, Any]]:
     id_to_sort_position = {item["id"]: item["sort_position"] for item in items}
     item_ids = set(id_to_sort_position)
     resource_list = [normalize_resource_item(item, detail_level) for item in items]

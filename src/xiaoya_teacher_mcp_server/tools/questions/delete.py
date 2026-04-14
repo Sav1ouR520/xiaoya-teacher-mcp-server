@@ -22,11 +22,15 @@ def delete_questions(
     failed_items, success_ids = [], []
     for question_id in question_ids:
         try:
-            response = post_json(url, payload={"paper_id": str(paper_id), "question_id": str(question_id)})
+            response = post_json(
+                url, payload={"paper_id": str(paper_id), "question_id": str(question_id)}
+            )
             if response["success"]:
                 success_ids.append(question_id)
             else:
-                failed_items.append({"question_id": question_id, "message": extract_response_message(response)})
+                failed_items.append(
+                    {"question_id": question_id, "message": extract_response_message(response)}
+                )
         except APIRequestError as exc:
             failed_items.append({"question_id": question_id, "message": str(exc)})
 
@@ -52,14 +56,16 @@ def delete_answer_item(
 ) -> dict:
     """删除题目的某个选项"""
     try:
-        expect_success(post_json(
-            f"{MAIN_URL}/survey/delAnswerItem",
-            payload={
-                "paper_id": str(paper_id),
-                "question_id": str(question_id),
-                "answer_item_id": str(answer_item_id),
-            },
-        ))
+        expect_success(
+            post_json(
+                f"{MAIN_URL}/survey/delAnswerItem",
+                payload={
+                    "paper_id": str(paper_id),
+                    "question_id": str(question_id),
+                    "answer_item_id": str(answer_item_id),
+                },
+            )
+        )
         return ResponseUtil.success(None, "选项删除成功")
     except APIRequestError as e:
         return ResponseUtil.error("删除题目选项时发生异常", e)

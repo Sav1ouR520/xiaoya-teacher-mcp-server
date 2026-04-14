@@ -1,13 +1,13 @@
 import os
-from typing import Any, Dict
+from typing import Any
 
+from xiaoya_teacher_mcp_server import config as cfg
 from xiaoya_teacher_mcp_server.config import MCP
 from xiaoya_teacher_mcp_server.utils.response import ResponseUtil
-from xiaoya_teacher_mcp_server import config as cfg
 
 
 @MCP.tool()
-def server_status() -> Dict[str, Any]:
+def server_status() -> dict[str, Any]:
     """返回当前 MCP 服务器运行模式、URL 与端口信息。"""
 
     # 规范化挂载路径
@@ -22,14 +22,8 @@ def server_status() -> Dict[str, Any]:
         return suffix if prefix in ("", "/") else prefix.rstrip("/") + suffix
 
     # 启用的传输方式
-    extras = {
-        p.strip()
-        for p in os.getenv("MCP_TRANSPORT", "").lower().split(",")
-        if p.strip()
-    }
-    transports = ["stdio"] + sorted(
-        t for t in extras if t in {"sse", "streamable-http"}
-    )
+    extras = {p.strip() for p in os.getenv("MCP_TRANSPORT", "").lower().split(",") if p.strip()}
+    transports = ["stdio"] + sorted(t for t in extras if t in {"sse", "streamable-http"})
 
     return ResponseUtil.success(
         {
@@ -46,7 +40,7 @@ def server_status() -> Dict[str, Any]:
 
 
 @MCP.tool()
-def auth_status(refresh: bool = False) -> Dict[str, Any]:
+def auth_status(refresh: bool = False) -> dict[str, Any]:
     """返回当前认证信息。"""
     try:
         state = cfg.auth_state

@@ -10,7 +10,11 @@ from xiaoya_teacher_mcp_server.tools.questions import create, delete, query, upd
 from xiaoya_teacher_mcp_server.tools.questions.normalize import parse_question
 from xiaoya_teacher_mcp_server.tools.resources import (
     create as resource_create,
+)
+from xiaoya_teacher_mcp_server.tools.resources import (
     delete as resource_delete,
+)
+from xiaoya_teacher_mcp_server.tools.resources import (
     query as resource_query,
 )
 from xiaoya_teacher_mcp_server.types import (
@@ -22,9 +26,9 @@ from xiaoya_teacher_mcp_server.types import (
     FillBlankAnswer,
     FillBlankQuestion,
     MultipleChoiceQuestionData,
+    ProgrammingLanguage,
     ProgramSetting,
     ProgramSettingAllNeed,
-    ProgrammingLanguage,
     QuestionOption,
     RandomizationType,
     ResourceType,
@@ -205,9 +209,7 @@ def test_batch_update_sort_and_delete():
         assert batch_result["success"]
         print(f"\n1. ✓ `批量创建`: {batch_result['message']}")
 
-        paper_data = query.query_paper(
-            group_id, paper_id, detail_level="full", parse_mode="raw"
-        )
+        paper_data = query.query_paper(group_id, paper_id, detail_level="full", parse_mode="raw")
         assert paper_data["success"]
         all_questions = paper_data["data"]["questions"]
         question_ids = [question["id"] for question in all_questions]
@@ -215,9 +217,7 @@ def test_batch_update_sort_and_delete():
 
         first_question = all_questions[0]
         answer_item_ids = [item["answer_item_id"] for item in first_question["options"]]
-        move_result = update.move_answer_item(
-            question_ids[0], list(reversed(answer_item_ids))
-        )
+        move_result = update.move_answer_item(question_ids[0], list(reversed(answer_item_ids)))
         assert move_result["success"]
         print("2. ✓ 选项排序")
 
@@ -242,9 +242,7 @@ def test_batch_update_sort_and_delete():
         assert updated["success"]
         print("4. ✓ 题目更新")
 
-        sort_result = update.update_paper_question_order(
-            paper_id, list(reversed(question_ids))
-        )
+        sort_result = update.update_paper_question_order(paper_id, list(reversed(question_ids)))
         assert sort_result["success"]
         print("5. ✓ 题目排序")
 

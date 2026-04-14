@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any
 
 from pydantic import Field
 
@@ -49,7 +49,7 @@ def resolve_parse_mode(need_parse: bool) -> str:
     return "plain" if need_parse else "raw"
 
 
-def extract_plain_title(title: Optional[str], title_raw: Optional[dict[str, Any]]) -> str:
+def extract_plain_title(title: str | None, title_raw: dict[str, Any] | None) -> str:
     return render_rich_text_output(title_raw if title_raw is not None else title, "plain") or ""
 
 
@@ -57,7 +57,7 @@ def create_question_data(
     paper_id: str,
     question_type: QuestionType,
     score: int,
-    insert_question_id: Optional[str] = None,
+    insert_question_id: str | None = None,
 ) -> dict[str, Any]:
     payload = {"paper_id": str(paper_id), "type": question_type.value, "score": score}
     if insert_question_id is not None and len(insert_question_id) == 19:
@@ -68,25 +68,31 @@ def create_question_data(
     )
 
 
-def create_blank_answer_items_data(paper_id: str, question_id: str, count: int) -> list[dict[str, Any]]:
-    return expect_success(post_json(
-        f"{MAIN_URL}/survey/createBlankAnswerItems",
-        payload={"paper_id": str(paper_id), "question_id": str(question_id), "count": count},
-    ))["answer_items"]
+def create_blank_answer_items_data(
+    paper_id: str, question_id: str, count: int
+) -> list[dict[str, Any]]:
+    return expect_success(
+        post_json(
+            f"{MAIN_URL}/survey/createBlankAnswerItems",
+            payload={"paper_id": str(paper_id), "question_id": str(question_id), "count": count},
+        )
+    )["answer_items"]
 
 
 def create_answer_item_data(paper_id: str, question_id: str) -> dict[str, Any]:
-    return expect_success(post_json(
-        f"{MAIN_URL}/survey/createAnswerItem",
-        payload={"paper_id": str(paper_id), "question_id": str(question_id)},
-    ))
+    return expect_success(
+        post_json(
+            f"{MAIN_URL}/survey/createAnswerItem",
+            payload={"paper_id": str(paper_id), "question_id": str(question_id)},
+        )
+    )
 
 
 def update_question_base(
     *,
     question_id: str,
-    title: Optional[str],
-    title_raw: Optional[dict[str, Any]],
+    title: str | None,
+    title_raw: dict[str, Any] | None,
     description: str,
     required: bool,
     parse_mode: str,
@@ -107,7 +113,7 @@ def update_question_base(
 
 
 def validate_fill_blank_question(
-    title: Optional[str], title_raw: Optional[dict[str, Any]], answers_count: int
+    title: str | None, title_raw: dict[str, Any] | None, answers_count: int
 ) -> str:
     plain_title = extract_plain_title(title, title_raw)
     if "____" not in plain_title:
@@ -138,7 +144,9 @@ def create_single_choice_question(
 @MCP.tool()
 def create_multiple_choice_question(
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
-    question: Annotated[MultipleChoiceQuestion, Field(description=desc.MULTIPLE_CHOICE_QUESTION_DESC)],
+    question: Annotated[
+        MultipleChoiceQuestion, Field(description=desc.MULTIPLE_CHOICE_QUESTION_DESC)
+    ],
     need_detail: Annotated[bool, Field(description=desc.NEED_DETAIL_DESC)] = False,
     need_parse: Annotated[bool, Field(description=desc.RETURN_PARSE_DESC)] = False,
 ) -> dict:
@@ -163,9 +171,11 @@ def create_fill_blank_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        plain_title = validate_fill_blank_question(question.title, question.title_raw, len(question.options))
+        validate_fill_blank_question(question.title, question.title_raw, len(question.options))
 
-        question_data = create_question_data(paper_id, QuestionType.FILL_BLANK, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, QuestionType.FILL_BLANK, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         question_data = update_question_base(
             question_id=question_id,
@@ -180,7 +190,7 @@ def create_fill_blank_question(
         )
         blank_items = create_blank_answer_items_data(paper_id, question_id, len(question.options))
         last_blank_data = []
-        for item, answer in zip(blank_items, question.options):
+        for item, answer in zip(blank_items, question.options, strict=False):
             r = update_fill_blank_answer(question_id, item["id"], answer.text)
             if not r.get("success"):
                 raise ValueError(r.get("message") or "填空答案更新失败")
@@ -204,12 +214,18 @@ def create_true_false_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        question_data = create_question_data(paper_id, QuestionType.TRUE_FALSE, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, QuestionType.TRUE_FALSE, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         answer_items = question_data["options"]
 
         answer_id = next(
-            (item["answer_item_id"] for item in answer_items if item["value"] == ("true" if question.answer else "")),
+            (
+                item["answer_item_id"]
+                for item in answer_items
+                if item["value"] == ("true" if question.answer else "")
+            ),
             None,
         )
         if answer_id is None:
@@ -245,7 +261,9 @@ def create_short_answer_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        question_data = create_question_data(paper_id, QuestionType.SHORT_ANSWER, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, QuestionType.SHORT_ANSWER, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         if not question_data.get("options"):
             raise ValueError("简答题创建失败: 服务端未返回答案项")
@@ -287,7 +305,9 @@ def create_attachment_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        question_data = create_question_data(paper_id, QuestionType.ATTACHMENT, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, QuestionType.ATTACHMENT, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         question_data = update_question_base(
             question_id=question_id,
@@ -315,7 +335,9 @@ def create_code_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        question_data = create_question_data(paper_id, QuestionType.CODE, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, QuestionType.CODE, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         options = question_data["options"]
         program_setting_id = question_data["program_setting"]["id"]
@@ -352,15 +374,13 @@ def batch_create_questions(
     questions: Annotated[
         list[
             Annotated[
-                Union[
-                    ChoiceQuestion,
-                    MultipleChoiceQuestion,
-                    TrueFalseQuestion,
-                    FillBlankQuestion,
-                    AttachmentQuestion,
-                    ShortAnswerQuestion,
-                    CodeQuestion,
-                ],
+                ChoiceQuestion
+                | MultipleChoiceQuestion
+                | TrueFalseQuestion
+                | FillBlankQuestion
+                | AttachmentQuestion
+                | ShortAnswerQuestion
+                | CodeQuestion,
                 Field(discriminator="type"),
             ]
         ],
@@ -447,9 +467,7 @@ def batch_create_questions(
                     "message": str(e),
                 }
             )
-            results["details"].append(
-                f"[第{index}题][创建异常][{question_type}][{str(e)}]"
-            )
+            results["details"].append(f"[第{index}题][创建异常][{question_type}][{str(e)}]")
 
     results["success_count"] = success_count
     results["failed_count"] = failed_count
@@ -468,15 +486,13 @@ def office_create_questions(
     questions: Annotated[
         list[
             Annotated[
-                Union[
-                    SingleChoiceQuestionData,
-                    MultipleChoiceQuestionData,
-                    FillBlankQuestionData,
-                    TrueFalseQuestionData,
-                    ShortAnswerQuestionData,
-                    AttachmentQuestionData,
-                    CodeQuestionData,
-                ],
+                SingleChoiceQuestionData
+                | MultipleChoiceQuestionData
+                | FillBlankQuestionData
+                | TrueFalseQuestionData
+                | ShortAnswerQuestionData
+                | AttachmentQuestionData
+                | CodeQuestionData,
                 Field(discriminator="type"),
             ]
         ],
@@ -490,13 +506,18 @@ def office_create_questions(
         for index, question in enumerate(questions, 1):
             if question.type == QuestionType.FILL_BLANK:
                 try:
-                    validate_fill_blank_question(question.title, None, len(question.standard_answers))
+                    validate_fill_blank_question(
+                        question.title, None, len(question.standard_answers)
+                    )
                 except ValueError as e:
                     return ResponseUtil.error(f"第{index}题格式错误", e)
 
         fixed_answer_items = {
             QuestionType.SHORT_ANSWER: [{"seqno": "A"}],
-            QuestionType.TRUE_FALSE: [{"seqno": "A", "context": "true"}, {"seqno": "B", "context": ""}],
+            QuestionType.TRUE_FALSE: [
+                {"seqno": "A", "context": "true"},
+                {"seqno": "B", "context": ""},
+            ],
             QuestionType.ATTACHMENT: [{"seqno": "A"}],
             QuestionType.CODE: [],
         }
@@ -508,17 +529,22 @@ def office_create_questions(
                 data["answer_items"] = items
             questions_data.append(data)
 
-        imported_questions = expect_success(post_json(
-            f"{MAIN_URL}/survey/question/import",
-            payload={"paper_id": str(paper_id), "questions": questions_data},
-        ))
+        imported_questions = expect_success(
+            post_json(
+                f"{MAIN_URL}/survey/question/import",
+                payload={"paper_id": str(paper_id), "questions": questions_data},
+            )
+        )
         validation_errors = validate_office_import_results(questions, imported_questions)
         if validation_errors:
             return ResponseUtil.error("批量导入完成但结果校验失败: " + "; ".join(validation_errors))
         if not need_detail:
             return ResponseUtil.success(None, f"[批量导入完成][共{len(imported_questions)}题]")
         return ResponseUtil.success(
-            [parse_question(q, parse_mode=resolve_parse_mode(need_parse)) for q in imported_questions],
+            [
+                parse_question(q, parse_mode=resolve_parse_mode(need_parse))
+                for q in imported_questions
+            ],
             f"[批量导入完成][共{len(imported_questions)}题]",
         )
     except KNOWN_CREATION_ERRORS as e:
@@ -530,7 +556,7 @@ def create_question(
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
     question_type: Annotated[int, Field(description=desc.QUESTION_TYPE_DESC)],
     score: Annotated[int, Field(description=desc.QUESTION_SCORE_DESC, gt=0)],
-    insert_question_id: Annotated[Optional[str], Field(description=desc.INSERT_AFTER_DESC)] = None,
+    insert_question_id: Annotated[str | None, Field(description=desc.INSERT_AFTER_DESC)] = None,
 ) -> dict:
     """在试卷中创建新题目(空白题目)"""
     try:
@@ -588,7 +614,9 @@ def _create_choice_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        question_data = create_question_data(paper_id, question_type, question.score, question.insert_question_id)
+        question_data = create_question_data(
+            paper_id, question_type, question.score, question.insert_question_id
+        )
         question_id = question_data["id"]
         answer_items = question_data["options"]
 
@@ -606,7 +634,7 @@ def _create_choice_question(
             answer_items.append({"answer_item_id": raw["id"]})
         # 设置每个选项的内容和答案标记
         last_options_data = []
-        for item, option in zip(answer_items, question.options):
+        for item, option in zip(answer_items, question.options, strict=False):
             r = update_question_options(
                 question_id=question_id,
                 answer_item_id=item["answer_item_id"],

@@ -1,13 +1,20 @@
-import uuid
 import os
+import uuid
 
 import pytest
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
+
 from xiaoya_teacher_mcp_server.tools.group import query as group_query
 from xiaoya_teacher_mcp_server.tools.resources import (
-    query as resource_query,
     create as resource_create,
+)
+from xiaoya_teacher_mcp_server.tools.resources import (
     delete as resource_delete,
+)
+from xiaoya_teacher_mcp_server.tools.resources import (
+    query as resource_query,
+)
+from xiaoya_teacher_mcp_server.tools.resources import (
     update as resource_update,
 )
 from xiaoya_teacher_mcp_server.types import ResourceType
@@ -182,7 +189,9 @@ def test_move_and_sort():
             r["id"]
             for r in sorted(dst_children_by_id.values(), key=lambda x: x.get("sort_position", 0))
         ]
-        assert [resource_id for resource_id in ordered_ids if resource_id in desired_order] == desired_order
+        assert [
+            resource_id for resource_id in ordered_ids if resource_id in desired_order
+        ] == desired_order
         print("3. ✓ 验证排序正确")
     finally:
         for _id in [child_c_id, child_b_id, child_a_id, src_id, dst_id]:

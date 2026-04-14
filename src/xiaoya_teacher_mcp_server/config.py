@@ -11,7 +11,6 @@ import string
 from contextlib import contextmanager
 from contextvars import ContextVar
 from threading import RLock
-from typing import Optional
 
 import requests
 from mcp.server.fastmcp import FastMCP
@@ -20,24 +19,17 @@ from .utils.logging import get_logger
 
 LOGGER = get_logger("xiaoya_teacher_mcp_server.auth")
 
+
 # 认证相关状态统一管理
 class AuthState:
     def __init__(self):
-        self.request_token: ContextVar[Optional[str]] = ContextVar(
-            "request_token", default=None
-        )
-        self.request_transport: ContextVar[str] = ContextVar(
-            "request_transport", default="stdio"
-        )
-        self.request_account: ContextVar[Optional[str]] = ContextVar(
-            "request_account", default=None
-        )
-        self.request_password: ContextVar[Optional[str]] = ContextVar(
-            "request_password", default=None
-        )
+        self.request_token: ContextVar[str | None] = ContextVar("request_token", default=None)
+        self.request_transport: ContextVar[str] = ContextVar("request_transport", default="stdio")
+        self.request_account: ContextVar[str | None] = ContextVar("request_account", default=None)
+        self.request_password: ContextVar[str | None] = ContextVar("request_password", default=None)
         self.account_tokens: dict[str, str] = {}
         self.account_tokens_lock = RLock()
-        self.cached_token: Optional[str] = None
+        self.cached_token: str | None = None
         self.is_initialized: bool = False
 
 
@@ -57,7 +49,7 @@ HEADERS = {
 }
 
 
-def _normalize_token(token: Optional[str]) -> Optional[str]:
+def _normalize_token(token: str | None) -> str | None:
     if not token:
         return None
     token = token.strip()
@@ -65,10 +57,10 @@ def _normalize_token(token: Optional[str]) -> Optional[str]:
 
 
 def resolve_request_token(
-    authorization: Optional[str] = None,
-    account: Optional[str] = None,
-    password: Optional[str] = None,
-) -> Optional[str]:
+    authorization: str | None = None,
+    account: str | None = None,
+    password: str | None = None,
+) -> str | None:
     if authorization:
         return _normalize_token(authorization)
     if account:
@@ -87,7 +79,7 @@ def resolve_request_token(
     return None
 
 
-def refresh_active_token() -> Optional[str]:
+def refresh_active_token() -> str | None:
     """刷新当前上下文对应的认证令牌。"""
     transport = auth_state.request_transport.get()
     if transport == "stdio":
@@ -121,14 +113,12 @@ def refresh_active_token() -> Optional[str]:
 def request_context(
     *,
     transport: str = "stdio",
-    authorization: Optional[str] = None,
-    account: Optional[str] = None,
-    password: Optional[str] = None,
+    authorization: str | None = None,
+    account: str | None = None,
+    password: str | None = None,
 ):
     token = (
-        None
-        if transport == "stdio"
-        else resolve_request_token(authorization, account, password)
+        None if transport == "stdio" else resolve_request_token(authorization, account, password)
     )
     ts_scope = auth_state.request_transport.set(transport)
     tk_scope = auth_state.request_token.set(token)
@@ -160,9 +150,7 @@ def headers() -> dict:
     token = auth_state.request_token.get()
     if token:
         return HEADERS | {"Authorization": token}
-    raise ValueError(
-        f"{transport} 缺少认证(Authorization 或 x-xiaoya-account/x-xiaoya-password)"
-    )
+    raise ValueError(f"{transport} 缺少认证(Authorization 或 x-xiaoya-account/x-xiaoya-password)")
 
 
 def initialize_auth() -> None:
@@ -183,7 +171,7 @@ def initialize_auth() -> None:
     LOGGER.info("认证初始化成功")
 
 
-def login(account: str, password: str) -> Optional[str]:
+def login(account: str, password: str) -> str | None:
     """通过账号密码登录获取认证令牌"""
     try:
         session = requests.Session()

@@ -22,7 +22,19 @@ def query_teacher_groups() -> dict:
         data = expect_success(get_json(f"{MAIN_URL}/group/teacher/groups"))
         courses = [
             {
-                **{key: item[key] for key in ["name", "teacher_names", "term_name", "department_name", "member_count", "start_time", "end_time"] if key in item},
+                **{
+                    key: item[key]
+                    for key in [
+                        "name",
+                        "teacher_names",
+                        "term_name",
+                        "department_name",
+                        "member_count",
+                        "start_time",
+                        "end_time",
+                    ]
+                    if key in item
+                },
                 "group_id": item["id"],
             }
             for item in data
@@ -99,15 +111,28 @@ def query_attendance_records(
         all_data = []
         current_page = 1
         while True:
-            page_data = expect_success(post_json(
-                f"{MAIN_URL}/register/group",
-                payload={"group_id": str(group_id), "page": current_page, "page_size": page_size},
-            ))
+            page_data = expect_success(
+                post_json(
+                    f"{MAIN_URL}/register/group",
+                    payload={
+                        "group_id": str(group_id),
+                        "page": current_page,
+                        "page_size": page_size,
+                    },
+                )
+            )
             registers = page_data["result"]["registers"]
             for record in registers:
                 filtered_record = {
                     key: record[key]
-                    for key in ["id", "start_time", "end_time", "class_id", "course_id", "register_count"]
+                    for key in [
+                        "id",
+                        "start_time",
+                        "end_time",
+                        "class_id",
+                        "course_id",
+                        "register_count",
+                    ]
                     if key in record
                 }
                 filtered_record["class_name"] = class_map.get(record["class_id"], "未知班级")
@@ -157,17 +182,28 @@ def query_single_attendance_students(
 ) -> dict:
     """查询单次签到的学生列表"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/register/one/student",
-            payload={
-                "register_id": str(register_id),
-                "group_id": str(group_id),
-                "course_id": str(course_id),
-            },
-        ))
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/register/one/student",
+                payload={
+                    "register_id": str(register_id),
+                    "group_id": str(group_id),
+                    "course_id": str(course_id),
+                },
+            )
+        )
         students = [
             {
-                **{key: student[key] for key in ["nickname", "register_status", "register_time", "student_number", "user_id"]},
+                **{
+                    key: student[key]
+                    for key in [
+                        "nickname",
+                        "register_status",
+                        "register_time",
+                        "student_number",
+                        "user_id",
+                    ]
+                },
                 "register_status": AttendanceStatus.get(student["register_status"], "未知"),
             }
             for student in data["result"]

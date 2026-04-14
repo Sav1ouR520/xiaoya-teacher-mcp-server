@@ -152,4 +152,3 @@ class ProgrammingLanguage(StrEnum):
     KOTLIN = "kotlin"
     PERL = "perl"
     OBJECT_PASCAL = "object_pascal"
-

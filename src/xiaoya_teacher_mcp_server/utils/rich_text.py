@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random
 import string
-from typing import Any, Optional
+from typing import Any
 
 
 def _generate_block_key(length: int = 5) -> str:
@@ -59,10 +59,10 @@ def dump_rich_text_raw(raw: dict[str, Any]) -> str:
 
 def normalize_rich_text_input(
     *,
-    text: Optional[str] = None,
-    raw: Optional[dict[str, Any]] = None,
+    text: str | None = None,
+    raw: dict[str, Any] | None = None,
     default_text: str = "",
-) -> Optional[str]:
+) -> str | None:
     if raw is not None:
         return dump_rich_text_raw(raw)
     if text is None:

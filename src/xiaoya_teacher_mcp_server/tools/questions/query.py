@@ -1,13 +1,14 @@
 """题目查询 MCP 工具"""
 
 from typing import Annotated
+
 from pydantic import Field
 
 from ... import field_descriptions as desc
+from ...config import MAIN_URL, MCP
 from ...tools.questions.normalize import parse_question, summarize_paper
 from ...utils.client import APIRequestError, expect_success, get_json
 from ...utils.response import ResponseUtil
-from ...config import MAIN_URL, MCP
 
 
 def _fetch_paper_edit_buffer(group_id: str, paper_id: str) -> dict:
@@ -22,8 +23,7 @@ def _build_paper_payload(data: dict, detail_level: str, parse_mode: str) -> dict
     paper_data = summarize_paper(data, parse_mode=parse_mode)
     if detail_level == "full":
         paper_data["questions"] = [
-            parse_question(question, parse_mode=parse_mode)
-            for question in data["questions"]
+            parse_question(question, parse_mode=parse_mode) for question in data["questions"]
         ]
     return paper_data
 

@@ -108,7 +108,9 @@ def _build_test_result_payload(data: dict[str, Any], detail_level: str) -> dict[
     raw_records = data.get("answer_records", [])
     lost_members = data.get("lost_members", [])
     answer_records = [_build_test_result_record(record, detail_level) for record in raw_records]
-    submitted_count = sum(1 for record in raw_records if record.get("status") == AnswerStatus.SUBMITTED)
+    submitted_count = sum(
+        1 for record in raw_records if record.get("status") == AnswerStatus.SUBMITTED
+    )
     total_score = sum(_safe_score(record.get("actual_score")) for record in raw_records)
     record_count = len(answer_records)
 
@@ -124,8 +126,7 @@ def _build_test_result_payload(data: dict[str, Any], detail_level: str) -> dict[
     if detail_level == "full":
         keep_keys = ["class_id", "class_name", "nickname", "student_number"]
         payload["lost_members"] = [
-            {key: member[key] for key in keep_keys if key in member}
-            for member in lost_members
+            {key: member[key] for key in keep_keys if key in member} for member in lost_members
         ]
     return payload
 
@@ -181,7 +182,9 @@ def _build_preview_question(
             question.get("description", ""), parse_mode
         )
         question_data["user"] = {
-            "answer": user_answer if is_choice else render_rich_text_output(user_answer, parse_mode),
+            "answer": user_answer
+            if is_choice
+            else render_rich_text_output(user_answer, parse_mode),
         }
         if question.get("answer_items"):
             question_data["options"] = parse_answer_items(
@@ -206,19 +209,13 @@ def _build_preview_payload(
 ) -> dict[str, Any]:
     answer_record = response_data.get("answer_record", {})
     answers = answer_record.get("answers", [])
-    answer_map = {
-        answer["question_id"]: answer
-        for answer in answers
-        if answer.get("question_id")
-    }
+    answer_map = {answer["question_id"]: answer for answer in answers if answer.get("question_id")}
 
     mark_records = response_data.get("mark_records", [])
     mark_record = mark_records[0] if mark_records else {}
     mark_paper_record_id = mark_record.get("id")
     mark_answers_map = {
-        ma["question_id"]: ma
-        for ma in mark_record.get("mark_answers", [])
-        if ma.get("question_id")
+        ma["question_id"]: ma for ma in mark_record.get("mark_answers", []) if ma.get("question_id")
     }
 
     questions = [
@@ -245,7 +242,9 @@ def query_group_tasks(
     group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
     detail_level: Annotated[
         str,
-        Field(description=desc.TASK_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"),
+        Field(
+            description=desc.TASK_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"
+        ),
     ] = "summary",
 ) -> dict:
     """查询课程组发布的全部测试/考试/任务"""
@@ -287,7 +286,9 @@ def query_test_result(
     publish_id: Annotated[str, Field(description=desc.PUBLISH_ID_DESC)],
     detail_level: Annotated[
         str,
-        Field(description=desc.ANSWER_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"),
+        Field(
+            description=desc.ANSWER_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"
+        ),
     ] = "summary",
 ) -> dict:
     """[批改第1步] 查询所有学生的答题情况，返回 mark_mode_id（后续批改必需）和每位学生的 record_id"""
@@ -313,7 +314,9 @@ def query_preview_student_paper(
     record_id: Annotated[str, Field(description=desc.RECORD_ID_DESC)],
     detail_level: Annotated[
         str,
-        Field(description=desc.ANSWER_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"),
+        Field(
+            description=desc.ANSWER_DETAIL_LEVEL_DESC, default="summary", pattern="^(summary|full)$"
+        ),
     ] = "summary",
     parse_mode: Annotated[
         str,

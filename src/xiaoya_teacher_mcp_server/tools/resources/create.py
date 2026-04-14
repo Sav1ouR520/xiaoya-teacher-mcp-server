@@ -23,15 +23,19 @@ def create_course_resource(
 ) -> dict:
     """创建新的教育资源"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/resource/addResource",
-            payload={
-                "type": str(type_val),
-                "parent_id": str(parent_id),
-                "group_id": str(group_id),
-                "name": name,
-            },
-        ))
-        return ResponseUtil.success(normalize_resource_item(data, detail_level="full"), "资源创建成功")
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/resource/addResource",
+                payload={
+                    "type": str(type_val),
+                    "parent_id": str(parent_id),
+                    "group_id": str(group_id),
+                    "name": name,
+                },
+            )
+        )
+        return ResponseUtil.success(
+            normalize_resource_item(data, detail_level="full"), "资源创建成功"
+        )
     except APIRequestError as e:
         return ResponseUtil.error("创建教育资源时发生异常", e)

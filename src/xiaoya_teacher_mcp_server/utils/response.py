@@ -1,7 +1,7 @@
 """统一响应格式工具"""
 
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 TIME_FIELDS = {
     "start_time",
@@ -36,7 +36,7 @@ def _normalize_time_value(value: Any) -> Any:
 
         if timestamp > 1e11:
             timestamp /= 1000
-        return _format_datetime(datetime.fromtimestamp(timestamp, tz=timezone.utc))
+        return _format_datetime(datetime.fromtimestamp(timestamp, tz=UTC))
     except (OverflowError, TypeError, ValueError):
         return value
 
@@ -59,7 +59,7 @@ class ResponseUtil:
     """用于创建标准化API响应的工具类"""
 
     @staticmethod
-    def success(data: Any = None, message: str = "操作成功") -> Dict[str, Any]:
+    def success(data: Any = None, message: str = "操作成功") -> dict[str, Any]:
         """创建成功响应"""
 
         return {
@@ -75,7 +75,7 @@ class ResponseUtil:
         exception: Exception = None,
         *,
         data: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """创建错误响应,仅返回必要错误信息,避免泄露内部堆栈。"""
         if exception is not None and isinstance(exception, Exception):
             detail = str(exception).strip()

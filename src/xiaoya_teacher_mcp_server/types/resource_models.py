@@ -53,4 +53,3 @@ class VisibilityType(IntEnum):
             1: "学生不可见",
             2: "学生可见",
         }.get(value, default)
-

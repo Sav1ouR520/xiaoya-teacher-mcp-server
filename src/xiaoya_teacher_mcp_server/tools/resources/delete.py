@@ -19,10 +19,12 @@ def delete_course_resource(
 ) -> dict:
     """删除教育资源"""
     try:
-        expect_success(post_json(
-            f"{MAIN_URL}/resource/delResource",
-            payload={"node_id": str(node_id), "group_id": str(group_id)},
-        ))
+        expect_success(
+            post_json(
+                f"{MAIN_URL}/resource/delResource",
+                payload={"node_id": str(node_id), "group_id": str(group_id)},
+            )
+        )
         return ResponseUtil.success(None, "资源删除成功")
     except APIRequestError as e:
         return ResponseUtil.error("删除教育资源时发生异常", e)

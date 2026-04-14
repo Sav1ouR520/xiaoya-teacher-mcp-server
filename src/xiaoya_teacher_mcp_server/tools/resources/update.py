@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, List
+from typing import Annotated
 
 from pydantic import Field
 
@@ -28,7 +28,9 @@ def _run_batch_resource_update(
             if response["success"]:
                 success_ids.append(node_id)
             else:
-                failed_items.append({"node_id": node_id, "message": extract_response_message(response)})
+                failed_items.append(
+                    {"node_id": node_id, "message": extract_response_message(response)}
+                )
         except APIRequestError as exc:
             failed_items.append({"node_id": node_id, "message": str(exc)})
     return success_ids, failed_items
@@ -62,11 +64,15 @@ def update_resource_name(
 ) -> dict:
     """更新教育资源的名称"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/resource/updateResource",
-            payload={"node_id": str(node_id), "group_id": str(group_id), "name": new_name},
-        ))
-        return ResponseUtil.success(normalize_resource_item(data, detail_level="full"), "资源名称更新成功")
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/resource/updateResource",
+                payload={"node_id": str(node_id), "group_id": str(group_id), "name": new_name},
+            )
+        )
+        return ResponseUtil.success(
+            normalize_resource_item(data, detail_level="full"), "资源名称更新成功"
+        )
     except APIRequestError as e:
         return ResponseUtil.error("更新资源名称时发生异常", e)
 
@@ -80,15 +86,17 @@ def move_resource(
 ) -> dict:
     """将资源移动到新的父文件夹"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/resource/moveResource",
-            payload={
-                "group_id": str(group_id),
-                "node_ids": [str(node_id)],
-                "from_parent_id": str(from_parent_id),
-                "parent_id": str(parent_id),
-            },
-        ))
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/resource/moveResource",
+                payload={
+                    "group_id": str(group_id),
+                    "node_ids": [str(node_id)],
+                    "from_parent_id": str(from_parent_id),
+                    "parent_id": str(parent_id),
+                },
+            )
+        )
         return ResponseUtil.success(
             [normalize_resource_item(item, detail_level="full") for item in data],
             "资源移动成功",
@@ -109,7 +117,11 @@ def batch_update_resource_download(
             node_ids=node_ids,
             request_builder=lambda node_id: post_json(
                 f"{MAIN_URL}/resource/batch/update/attribute",
-                payload={"group_id": str(group_id), "node_id": str(node_id), "download": int(download)},
+                payload={
+                    "group_id": str(group_id),
+                    "node_id": str(node_id),
+                    "download": int(download),
+                },
             ),
         )
         return _batch_update_response(
@@ -148,20 +160,27 @@ def batch_update_resource_visibility(
 @MCP.tool()
 def update_resource_sort(
     group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
-    sorted_ids: Annotated[List[str], Field(description=desc.RESOURCE_ID_LIST_ORDER_DESC, min_length=1)],
+    sorted_ids: Annotated[
+        list[str], Field(description=desc.RESOURCE_ID_LIST_ORDER_DESC, min_length=1)
+    ],
 ) -> dict:
     """更新课程组内资源的排序"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/resource/sortNode",
-            payload={
-                "group_id": str(group_id),
-                "sort_content": json.dumps(
-                    [{"node_id": str(node_id), "sort_position": index} for index, node_id in enumerate(sorted_ids)],
-                    ensure_ascii=False,
-                ),
-            },
-        ))
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/resource/sortNode",
+                payload={
+                    "group_id": str(group_id),
+                    "sort_content": json.dumps(
+                        [
+                            {"node_id": str(node_id), "sort_position": index}
+                            for index, node_id in enumerate(sorted_ids)
+                        ],
+                        ensure_ascii=False,
+                    ),
+                },
+            )
+        )
         return ResponseUtil.success(
             sorted(data, key=lambda item: item["sort_position"]),
             "资源排序成功",

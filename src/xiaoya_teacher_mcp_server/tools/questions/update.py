@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 from pydantic import Field
 
@@ -53,7 +53,7 @@ def _format_choice_items(items: list[dict[str, Any]], parse_mode: str) -> list[d
 
 
 def _format_answer_items(
-    items: list[dict[str, Any]], field: str, *, parse_mode: Optional[str] = None
+    items: list[dict[str, Any]], field: str, *, parse_mode: str | None = None
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -85,9 +85,9 @@ def _format_question_order(data: dict[str, Any]) -> dict[str, Any]:
 def _update_paper_settings(
     *,
     paper_id: str,
-    question_shuffle: Optional[RandomizationType] = None,
-    option_shuffle: Optional[RandomizationType] = None,
-    question_score_type: Optional[QuestionScoreType] = None,
+    question_shuffle: RandomizationType | None = None,
+    option_shuffle: RandomizationType | None = None,
+    question_score_type: QuestionScoreType | None = None,
 ) -> None:
     payload: dict[str, Any] = {"paper_id": str(paper_id)}
     if option_shuffle is not None:
@@ -134,15 +134,17 @@ def _update_code_cases(
 ) -> list[dict[str, Any]]:
     _validate_in_cases(in_cases)
 
-    case_data = expect_success(post_json(
-        f"{MAIN_URL}/survey/program/runcase",
-        payload={
-            "answer_item_id": str(answer_item_id),
-            "language": language,
-            "code": code,
-            "input": json.dumps(in_cases),
-        },
-    ))
+    case_data = expect_success(
+        post_json(
+            f"{MAIN_URL}/survey/program/runcase",
+            payload={
+                "answer_item_id": str(answer_item_id),
+                "language": language,
+                "code": code,
+                "input": json.dumps(in_cases),
+            },
+        )
+    )
     if not case_data["pass"]:
         raise ValueError(f"代码运行测试用例失败, 运行结果:{case_data}")
 
@@ -150,29 +152,37 @@ def _update_code_cases(
         {"id": f"use_case_{i}", "in": case["in"], "out": case["out"]}
         for i, case in enumerate(case_data["result"])
     ]
-    return expect_success(post_json(
-        f"{MAIN_URL}/survey/updateAnswerItem",
-        payload={
-            "question_id": str(question_id),
-            "answer_item_id": str(answer_item_id),
-            "answer": json.dumps(formatted_cases, ensure_ascii=False),
-        },
-    ))
+    return expect_success(
+        post_json(
+            f"{MAIN_URL}/survey/updateAnswerItem",
+            payload={
+                "question_id": str(question_id),
+                "answer_item_id": str(answer_item_id),
+                "answer": json.dumps(formatted_cases, ensure_ascii=False),
+            },
+        )
+    )
 
 
 @MCP.tool()
 def update_question(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
-    title: Annotated[Optional[str], Field(description=desc.QUESTION_RICH_TEXT_DESC)] = None,
-    title_raw: Annotated[Optional[dict[str, Any]], Field(description=desc.QUESTION_RAW_RICH_TEXT_DESC)] = None,
-    score: Annotated[Optional[int], Field(description=desc.QUESTION_SCORE_UPDATE_DESC, ge=0)] = None,
-    description: Annotated[Optional[str], Field(description=desc.ANSWER_EXPLANATION_DESC)] = None,
-    required: Annotated[Optional[RequiredType], Field(description=desc.REQUIRED_DESC)] = None,
-    is_split_answer: Annotated[Optional[bool], Field(description=desc.SPLIT_ANSWER_DESC)] = None,
-    automatic_stat: Annotated[Optional[AutoStatType], Field(description=desc.AUTO_STAT_DESC)] = None,
-    automatic_type: Annotated[Optional[AutoScoreType], Field(description=desc.AUTO_SCORE_DESC)] = None,
-    program_setting: Annotated[Optional[ProgramSetting], Field(description=desc.PROGRAM_SETTING_OPTIONAL_DESC)] = None,
-    parse_mode: Annotated[str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")] = "plain",
+    title: Annotated[str | None, Field(description=desc.QUESTION_RICH_TEXT_DESC)] = None,
+    title_raw: Annotated[
+        dict[str, Any] | None, Field(description=desc.QUESTION_RAW_RICH_TEXT_DESC)
+    ] = None,
+    score: Annotated[int | None, Field(description=desc.QUESTION_SCORE_UPDATE_DESC, ge=0)] = None,
+    description: Annotated[str | None, Field(description=desc.ANSWER_EXPLANATION_DESC)] = None,
+    required: Annotated[RequiredType | None, Field(description=desc.REQUIRED_DESC)] = None,
+    is_split_answer: Annotated[bool | None, Field(description=desc.SPLIT_ANSWER_DESC)] = None,
+    automatic_stat: Annotated[AutoStatType | None, Field(description=desc.AUTO_STAT_DESC)] = None,
+    automatic_type: Annotated[AutoScoreType | None, Field(description=desc.AUTO_SCORE_DESC)] = None,
+    program_setting: Annotated[
+        ProgramSetting | None, Field(description=desc.PROGRAM_SETTING_OPTIONAL_DESC)
+    ] = None,
+    parse_mode: Annotated[
+        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+    ] = "plain",
 ) -> dict:
     """更新任意题目的通用配置"""
     try:
@@ -225,10 +235,14 @@ def update_question(
 def update_question_options(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
     answer_item_id: Annotated[str, Field(description=desc.OPTION_ID_DESC)],
-    option_text: Annotated[Optional[str], Field(description=desc.OPTION_TEXT_DESC)] = None,
-    option_text_raw: Annotated[Optional[dict[str, Any]], Field(description=desc.OPTION_RAW_TEXT_DESC)] = None,
-    is_answer: Annotated[Optional[bool], Field(description=desc.OPTION_ANSWER_DESC)] = False,
-    parse_mode: Annotated[str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")] = "plain",
+    option_text: Annotated[str | None, Field(description=desc.OPTION_TEXT_DESC)] = None,
+    option_text_raw: Annotated[
+        dict[str, Any] | None, Field(description=desc.OPTION_RAW_TEXT_DESC)
+    ] = None,
+    is_answer: Annotated[bool | None, Field(description=desc.OPTION_ANSWER_DESC)] = False,
+    parse_mode: Annotated[
+        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+    ] = "plain",
 ) -> dict:
     """[仅限单选/多选题]更新单选或多选题的选项内容"""
     try:
@@ -297,9 +311,13 @@ def update_true_false_answer(
 def update_short_answer_answer(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
     answer_item_id: Annotated[str, Field(description=desc.ANSWER_ITEM_ID_DESC)],
-    answer: Annotated[Optional[str], Field(description=desc.REFERENCE_RICH_TEXT_DESC)] = None,
-    answer_raw: Annotated[Optional[dict[str, Any]], Field(description=desc.REFERENCE_RAW_RICH_TEXT_DESC)] = None,
-    parse_mode: Annotated[str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")] = "plain",
+    answer: Annotated[str | None, Field(description=desc.REFERENCE_RICH_TEXT_DESC)] = None,
+    answer_raw: Annotated[
+        dict[str, Any] | None, Field(description=desc.REFERENCE_RAW_RICH_TEXT_DESC)
+    ] = None,
+    parse_mode: Annotated[
+        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+    ] = "plain",
 ) -> dict:
     """[仅限简答题]更新简答题参考答案"""
     try:
@@ -355,9 +373,15 @@ def update_code_test_cases(
 @MCP.tool()
 def update_paper_randomization(
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
-    question_shuffle: Annotated[Optional[RandomizationType], Field(description=desc.RANDOMIZE_QUESTION_DESC)] = None,
-    option_shuffle: Annotated[Optional[RandomizationType], Field(description=desc.RANDOMIZE_OPTION_DESC)] = None,
-    question_score_type: Annotated[Optional[QuestionScoreType], Field(description=desc.QUESTION_SCORE_TYPE_DESC)] = None,
+    question_shuffle: Annotated[
+        RandomizationType | None, Field(description=desc.RANDOMIZE_QUESTION_DESC)
+    ] = None,
+    option_shuffle: Annotated[
+        RandomizationType | None, Field(description=desc.RANDOMIZE_OPTION_DESC)
+    ] = None,
+    question_score_type: Annotated[
+        QuestionScoreType | None, Field(description=desc.QUESTION_SCORE_TYPE_DESC)
+    ] = None,
 ) -> dict:
     """更新试卷的题目和选项随机化设置"""
     try:
@@ -376,14 +400,22 @@ def update_paper_randomization(
 def configure_paper_basics(
     group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
-    required: Annotated[Optional[RequiredType], Field(description=desc.REQUIRED_DESC)] = None,
-    question_shuffle: Annotated[Optional[RandomizationType], Field(description=desc.RANDOMIZE_QUESTION_DESC)] = None,
-    option_shuffle: Annotated[Optional[RandomizationType], Field(description=desc.RANDOMIZE_OPTION_DESC)] = None,
-    question_score_type: Annotated[Optional[QuestionScoreType], Field(description=desc.QUESTION_SCORE_TYPE_DESC)] = None,
+    required: Annotated[RequiredType | None, Field(description=desc.REQUIRED_DESC)] = None,
+    question_shuffle: Annotated[
+        RandomizationType | None, Field(description=desc.RANDOMIZE_QUESTION_DESC)
+    ] = None,
+    option_shuffle: Annotated[
+        RandomizationType | None, Field(description=desc.RANDOMIZE_OPTION_DESC)
+    ] = None,
+    question_score_type: Annotated[
+        QuestionScoreType | None, Field(description=desc.QUESTION_SCORE_TYPE_DESC)
+    ] = None,
 ) -> dict:
     """一键配置整卷常用基础设置"""
     try:
-        if all(v is None for v in (required, question_shuffle, option_shuffle, question_score_type)):
+        if all(
+            v is None for v in (required, question_shuffle, option_shuffle, question_score_type)
+        ):
             raise ValueError("至少提供一个配置项")
 
         summary: dict[str, Any] = {
@@ -429,14 +461,18 @@ def configure_paper_basics(
 @MCP.tool()
 def move_answer_item(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
-    answer_item_ids: Annotated[list[str], Field(description=desc.ANSWER_ITEM_ID_LIST_DESC, min_length=1)],
+    answer_item_ids: Annotated[
+        list[str], Field(description=desc.ANSWER_ITEM_ID_LIST_DESC, min_length=1)
+    ],
 ) -> dict:
     """[不限制题型]调整题目选项顺序"""
     try:
-        expect_success(post_json(
-            f"{MAIN_URL}/survey/moveAnswerItem",
-            payload={"question_id": str(question_id), "answer_item_ids": answer_item_ids},
-        ))
+        expect_success(
+            post_json(
+                f"{MAIN_URL}/survey/moveAnswerItem",
+                payload={"question_id": str(question_id), "answer_item_ids": answer_item_ids},
+            )
+        )
         return ResponseUtil.success(None, "题目选项顺序调整成功")
     except KNOWN_UPDATE_ERRORS as e:
         return ResponseUtil.error("题目选项顺序调整失败", e)
@@ -445,17 +481,21 @@ def move_answer_item(
 @MCP.tool()
 def update_paper_question_order(
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_DESC)],
-    question_ids: Annotated[list[str], Field(description=desc.QUESTION_ID_LIST_ORDER_DESC, min_length=1)],
+    question_ids: Annotated[
+        list[str], Field(description=desc.QUESTION_ID_LIST_ORDER_DESC, min_length=1)
+    ],
 ) -> dict:
     """更新试卷的题目顺序"""
     try:
-        data = expect_success(post_json(
-            f"{MAIN_URL}/survey/moveQuestion",
-            payload={
-                "paper_id": str(paper_id),
-                "question_ids": [str(qid) for qid in question_ids],
-            },
-        ))
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/survey/moveQuestion",
+                payload={
+                    "paper_id": str(paper_id),
+                    "question_ids": [str(qid) for qid in question_ids],
+                },
+            )
+        )
         return ResponseUtil.success(_format_question_order(data), "试卷题目顺序更新成功")
     except KNOWN_UPDATE_ERRORS as e:
         return ResponseUtil.error("试卷题目顺序更新失败", e)

@@ -1,7 +1,8 @@
 import os
 
 import pytest
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
+
 from xiaoya_teacher_mcp_server.tools.group import query
 
 load_dotenv(find_dotenv())

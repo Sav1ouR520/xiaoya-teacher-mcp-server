@@ -21,11 +21,13 @@ def parse_answer_items(
     question_type: int,
     parse_mode: str = "plain",
 ) -> list[dict[str, Any]]:
-    _parse_choice = lambda item: {
-        "answer_item_id": item["id"],
-        "value": render_rich_text_output(item["value"], parse_mode),
-        "answer": AnswerChecked.get(item["answer_checked"]),
-    }
+    def _parse_choice(item):
+        return {
+            "answer_item_id": item["id"],
+            "value": render_rich_text_output(item["value"], parse_mode),
+            "answer": AnswerChecked.get(item["answer_checked"]),
+        }
+
     parsers = {
         QuestionType.MULTIPLE_CHOICE.value: _parse_choice,
         QuestionType.SINGLE_CHOICE.value: _parse_choice,
@@ -139,12 +141,10 @@ def validate_office_import_results(
     questions: list[Any], imported_questions: list[dict[str, Any]]
 ) -> list[str]:
     if len(questions) != len(imported_questions):
-        return [
-            f"导入返回题目数量异常: 预期{len(questions)}题, 实际{len(imported_questions)}题"
-        ]
+        return [f"导入返回题目数量异常: 预期{len(questions)}题, 实际{len(imported_questions)}题"]
 
     errors = []
-    for index, (expected, actual) in enumerate(zip(questions, imported_questions), 1):
+    for index, (expected, actual) in enumerate(zip(questions, imported_questions, strict=False), 1):
         if expected.type != actual.get("type"):
             errors.append(
                 f"第{index}题类型不一致: 预期{QuestionType.get(expected.type)}, 实际{QuestionType.get(actual.get('type'))}"
@@ -157,8 +157,7 @@ def validate_office_import_results(
             QuestionType.TRUE_FALSE,
         ):
             expected_answers = {
-                str(answer.standard_answer).strip().upper()
-                for answer in expected.standard_answers
+                str(answer.standard_answer).strip().upper() for answer in expected.standard_answers
             }
             answer_items = actual.get("answer_items", [])
             can_validate_answers = any(
@@ -175,12 +174,10 @@ def validate_office_import_results(
                 )
         elif expected.type == QuestionType.FILL_BLANK:
             expected_answers = [
-                str(answer.standard_answer).strip()
-                for answer in expected.standard_answers
+                str(answer.standard_answer).strip() for answer in expected.standard_answers
             ]
             actual_answers = [
-                str(item.get("answer", "")).strip()
-                for item in actual.get("answer_items", [])
+                str(item.get("answer", "")).strip() for item in actual.get("answer_items", [])
             ]
             if expected_answers != actual_answers:
                 errors.append(

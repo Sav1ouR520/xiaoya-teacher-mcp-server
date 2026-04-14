@@ -52,4 +52,3 @@ class AnswerStatus(IntEnum):
             1: "答题中",
             2: "已提交",
         }.get(value, default)
-

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
@@ -17,9 +17,7 @@ class APIRequestError(RuntimeError):
     """API 请求失败或返回异常响应。"""
 
 
-def extract_response_message(
-    response: dict[str, Any], default: str = "未知错误"
-) -> str:
+def extract_response_message(response: dict[str, Any], default: str = "未知错误") -> str:
     message = response.get("msg") or response.get("message")
     if isinstance(message, dict):
         return str(message.get("message") or message.get("msg") or default)
@@ -56,8 +54,8 @@ def request_json(
     method: str,
     url: str,
     *,
-    params: Optional[dict[str, Any]] = None,
-    payload: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     allow_http_error: bool = False,
 ) -> dict[str, Any]:
@@ -73,11 +71,7 @@ def request_json(
             allow_http_error=allow_http_error,
         )
         parsed = _parse_json_response(response)
-        if (
-            not parsed.get("success")
-            and not refreshed
-            and _looks_like_auth_error(parsed)
-        ):
+        if not parsed.get("success") and not refreshed and _looks_like_auth_error(parsed):
             new_token = refresh_active_token()
             if new_token:
                 refreshed = True
@@ -90,8 +84,8 @@ def request_response(
     method: str,
     url: str,
     *,
-    params: Optional[dict[str, Any]] = None,
-    payload: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
     stream: bool = False,
     timeout: int = DEFAULT_TIMEOUT,
     allow_http_error: bool = False,
@@ -136,7 +130,7 @@ def request_response(
 def get_json(
     url: str,
     *,
-    params: Optional[dict[str, Any]] = None,
+    params: dict[str, Any] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     allow_http_error: bool = False,
 ) -> dict[str, Any]:
@@ -152,7 +146,7 @@ def get_json(
 def post_json(
     url: str,
     *,
-    payload: Optional[dict[str, Any]] = None,
+    payload: dict[str, Any] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     allow_http_error: bool = False,
 ) -> dict[str, Any]:

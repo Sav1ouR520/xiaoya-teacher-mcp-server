@@ -13,4 +13,3 @@ def get_logger(name: str) -> logging.Logger:
     logger.addHandler(handler)
     logger.propagate = False
     return logger
-
