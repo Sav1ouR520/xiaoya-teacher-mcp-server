@@ -1,8 +1,13 @@
+import base64
 import os
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
+
 from xiaoya_teacher_mcp_server.tools.group import query as group_query
+from xiaoya_teacher_mcp_server.tools.task import grade as task_grade
 from xiaoya_teacher_mcp_server.tools.task import query as task_query
 
 load_dotenv(find_dotenv())
@@ -239,3 +244,57 @@ def test_query_preview_student_paper_defaults_to_summary(monkeypatch):
             "check_score": 5,
         }
     ]
+
+
+def _stub_response(content: bytes, content_type: str = "image/png") -> SimpleNamespace:
+    return SimpleNamespace(content=content, headers={"content-type": content_type})
+
+
+def test_get_answer_file_returns_base64_when_no_save_path(monkeypatch):
+    payload = b"\x89PNG\r\n\x1a\nfake"
+    monkeypatch.setattr(
+        task_grade,
+        "request_response",
+        lambda *args, **kwargs: _stub_response(payload),
+    )
+
+    result = task_grade.get_answer_file("quote-1")
+
+    assert result["success"]
+    assert result["data"]["content"] == base64.b64encode(payload).decode()
+    assert result["data"]["mimetype"] == "image/png"
+    assert result["data"]["size"] == len(payload)
+    assert "file_path" not in result["data"]
+
+
+def test_get_answer_file_writes_to_save_path_file(monkeypatch, tmp_path):
+    payload = b"PDF-BYTES"
+    monkeypatch.setattr(
+        task_grade,
+        "request_response",
+        lambda *args, **kwargs: _stub_response(payload, "application/pdf"),
+    )
+
+    target = tmp_path / "sub" / "answer.pdf"
+    result = task_grade.get_answer_file("quote-2", save_path=str(target))
+
+    assert result["success"]
+    assert result["data"]["file_path"] == str(target)
+    assert "content" not in result["data"]
+    assert Path(target).read_bytes() == payload
+
+
+def test_get_answer_file_save_path_directory_auto_names(monkeypatch, tmp_path):
+    payload = b"\x89PNG\r\nok"
+    monkeypatch.setattr(
+        task_grade,
+        "request_response",
+        lambda *args, **kwargs: _stub_response(payload, "image/png"),
+    )
+
+    result = task_grade.get_answer_file("quote-3", save_path=str(tmp_path))
+
+    assert result["success"]
+    expected = tmp_path / "quote-3.png"
+    assert result["data"]["file_path"] == str(expected)
+    assert expected.read_bytes() == payload

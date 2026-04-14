@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 from urllib.parse import quote
 
 from markitdown import MarkItDown
@@ -49,20 +50,14 @@ def _sort_position_map(items: list[dict]) -> dict[str, int]:
 
 
 def _get_download_url(paper_id: str, filename: str) -> str:
-    response = get_json(
-        f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}"
-    )
+    response = get_json(f"{DOWNLOAD_URL}/cloud/file_down/{paper_id}/v2?filename={quote(filename)}")
     try:
         return expect_success(response)["download_url"]
     except APIRequestError as exc:
-        raise APIRequestError(
-            f"获取文件下载链接失败 (文件名: {filename}): {exc}"
-        ) from exc
+        raise APIRequestError(f"获取文件下载链接失败 (文件名: {filename}): {exc}") from exc
 
 
-def _fetch_download_response(
-    paper_id: str, filename: str, *, stream: bool = False
-):
+def _fetch_download_response(paper_id: str, filename: str, *, stream: bool = False):
     return request_response("GET", _get_download_url(paper_id, filename), stream=stream, timeout=20)
 
 
@@ -78,9 +73,7 @@ def _build_resource_summary_view(raw_data: list[dict[str, Any]], view_mode: str)
 def _query_course_resource_map(group_id: str, detail_level: str = "full") -> dict:
     try:
         resource_map = _load_course_resource_map(group_id, detail_level=detail_level)
-        return ResponseUtil.success(
-            resource_map, f"成功获取课程资源,共{len(resource_map)}项"
-        )
+        return ResponseUtil.success(resource_map, f"成功获取课程资源,共{len(resource_map)}项")
     except (APIRequestError, ValueError) as e:
         return ResponseUtil.error("查询课程资源时发生异常", e)
 
@@ -129,9 +122,7 @@ def query_course_resources_summary(
     group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
     view_mode: Annotated[
         str,
-        Field(
-            description=desc.RESOURCE_VIEW_MODE_DESC, default="tree", pattern="^(tree|flat)$"
-        ),
+        Field(description=desc.RESOURCE_VIEW_MODE_DESC, default="tree", pattern="^(tree|flat)$"),
     ] = "tree",
 ) -> dict:
     """获取课程资源摘要(推荐 AI 默认使用)"""
@@ -210,19 +201,26 @@ def download_file(
     paper_id: Annotated[str, Field(description=desc.PAPER_ID_FILE_DESC)],
     filename: Annotated[str, Field(description=desc.FILENAME_DESC)],
     save_path: Annotated[
-        Optional[str],
+        str | None,
         Field(description=desc.SAVE_PATH_DESC, default=None),
     ] = None,
 ) -> dict:
-    """获取下载链接并自动下载文件内容,保存到本地磁盘"""
+    """获取下载链接并自动下载文件内容,保存到本地磁盘。
+
+    - save_path 传文件绝对路径：按该路径保存，自动创建不存在的父目录。
+    - save_path 传已存在的目录：在目录下用原 filename 保存。
+    - save_path 不传：保存到系统临时目录，文件名会带原 filename 后缀。
+    """
     try:
         download_response = _fetch_download_response(paper_id, filename, stream=True)
 
-        file_path = (
-            save_path
-            if save_path
-            else tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}").name
-        )
+        if save_path:
+            file_path = os.path.join(save_path, filename) if os.path.isdir(save_path) else save_path
+        else:
+            file_path = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{filename}").name
+        parent = os.path.dirname(file_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         with open(file_path, "wb") as handle:
             handle.write(download_response.content)
 
@@ -230,7 +228,7 @@ def download_file(
             {
                 "filename": filename,
                 "file_path": file_path,
-                    "content_type": download_response.headers.get("Content-Type", ""),
+                "content_type": download_response.headers.get("Content-Type", ""),
             },
             f"文件下载成功: {file_path}",
         )
@@ -241,16 +239,18 @@ def download_file(
 @MCP.tool()
 def read_file_by_markdown(
     paper_id: Annotated[
-        Optional[str], Field(description=desc.PAPER_ID_FILE_DESC, default=None)
+        str | None, Field(description=desc.PAPER_ID_FILE_DESC, default=None)
     ] = None,
-    filename: Annotated[
-        Optional[str], Field(description=desc.FILENAME_DESC, default=None)
-    ] = None,
-    file_path: Annotated[
-        Optional[str], Field(description=desc.FILE_PATH_DESC, default=None)
-    ] = None,
+    filename: Annotated[str | None, Field(description=desc.FILENAME_DESC, default=None)] = None,
+    file_path: Annotated[str | None, Field(description=desc.FILE_PATH_DESC, default=None)] = None,
 ) -> dict:
-    """使用markitdown工具读取本地文件路径(提供file_path)或小雅资源(需同时提供paper_id和filename)的文件内容并转换为markdown格式"""
+    """用 markitdown 把文件内容读成 Markdown。
+
+    两种模式（传 file_path 优先）：
+      - file_path：读本地文件。
+      - paper_id + filename：读小雅课程资源（同时必填）。
+    支持 docx/pptx/xlsx/pdf/html/图片 OCR 等常见格式。
+    """
     try:
         if file_path:
             result = MarkItDown().convert(Path(file_path))

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import mimetypes
+import os
 from typing import Annotated
 
 from pydantic import Field
@@ -24,12 +26,12 @@ def grade_student_question(
     score: Annotated[float, Field(description=desc.CHECK_SCORE_DESC, ge=0)],
     comment: Annotated[str, Field(description=desc.CHECK_COMMENT_DESC, default="")] = "",
 ) -> dict:
-    """[批改第3步] 给学生某道题打分。完整批改流程：
-    1. query_test_result        → 获取 mark_mode_id、record_id
-    2. query_preview_student_paper → 获取 mark_paper_record_id、各题 answer_id
-    3. grade_student_question   → 对每道题逐一打分（本工具）
-    4. submit_student_mark      → 提交整卷批阅结果
-    注意：简答/附件题需要手动批改；选择题/填空/判断系统已自动评分，无需调用本工具。"""
+    """[批改 3/4] 给学生某道题打分。
+
+    何时调用：仅简答题（type=6）和附件题（type=7）需要；选择/填空/判断/编程系统自动评分，跳过。
+    score 上限 = query_preview_student_paper 返回的该题 score 字段；未 submit 前可重复打分覆盖。
+    四步流程：query_test_result → query_preview_student_paper → grade_student_question → submit_student_mark。
+    """
     try:
         data = expect_success(
             post_json(
@@ -58,7 +60,11 @@ def submit_student_mark(
     mark_mode_id: Annotated[str, Field(description=desc.MARK_MODE_ID_DESC)],
     mark_paper_record_id: Annotated[str, Field(description=desc.MARK_PAPER_RECORD_ID_DESC)],
 ) -> dict:
-    """[批改第4步] 提交整卷批阅结果（必须在 grade_student_question 对所有题打分后调用，否则提交无效）"""
+    """[批改 4/4] 提交整卷批阅结果。
+
+    调用前需对该卷所有需手工批改的题都执行过 grade_student_question；
+    本工具一旦成功，该学生本卷的分数即写入学生端，不可再改。
+    """
     try:
         data = expect_success(
             post_json(
@@ -79,22 +85,66 @@ def submit_student_mark(
 @MCP.tool()
 def get_answer_file(
     quote_id: Annotated[str, Field(description=desc.QUOTE_ID_DESC)],
+    save_path: Annotated[
+        str | None,
+        Field(
+            description=(
+                "附件保存路径（可选）。传文件路径或已存在目录时直接落盘，响应里只返回 file_path。"
+                "图片/PDF 批阅推荐用这个配合 Read 工具看图，避免 base64 撑爆上下文。"
+            ),
+            default=None,
+        ),
+    ] = None,
 ) -> dict:
-    """获取学生答题附件内容(图片/PDF/文件等均支持),返回base64编码内容及MIME类型"""
+    """获取学生答题附件（图片/PDF/文件等均可）。
+
+    两种模式：
+      - 不传 save_path：返回 base64 + mimetype（适合小附件解析）。
+      - 传 save_path：落盘后返回 file_path（适合图片批阅，agent 直接 Read 查看）。
+    """
     try:
         resp = request_response(
             "GET",
             f"{DOWNLOAD_URL}/cloud/file_access/{quote_id}",
             timeout=30,
         )
-        mimetype = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+        mimetype = (
+            resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
+        )
+        size = len(resp.content)
+
+        if save_path:
+            file_path = _resolve_attachment_path(save_path, quote_id, mimetype)
+            parent = os.path.dirname(file_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(file_path, "wb") as handle:
+                handle.write(resp.content)
+            return ResponseUtil.success(
+                {
+                    "file_path": file_path,
+                    "mimetype": mimetype,
+                    "size": size,
+                },
+                f"附件已保存: {file_path}",
+            )
+
         return ResponseUtil.success(
             {
                 "content": base64.b64encode(resp.content).decode(),
                 "mimetype": mimetype,
-                "size": len(resp.content),
+                "size": size,
             },
             "获取附件成功",
         )
-    except APIRequestError as e:
+    except (APIRequestError, OSError) as e:
         return ResponseUtil.error("获取附件失败", e)
+
+
+def _resolve_attachment_path(save_path: str, quote_id: str, mimetype: str) -> str:
+    """save_path 是已存在目录或以分隔符结尾 → 拼 quote_id + 推断扩展名；否则当成完整文件路径。"""
+    is_dir = os.path.isdir(save_path) or save_path.endswith(("/", os.sep))
+    if is_dir:
+        ext = mimetypes.guess_extension(mimetype) or ""
+        return os.path.join(save_path, f"{quote_id}{ext}")
+    return save_path
