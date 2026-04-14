@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -17,9 +17,7 @@ from .enums import (
 RawRichText = dict[str, Any]
 
 
-def _validate_text_or_raw_input(
-    text: Optional[str], raw: Optional[RawRichText], field_name: str
-) -> None:
+def _validate_text_or_raw_input(text: str | None, raw: RawRichText | None, field_name: str) -> None:
     if text is None and raw is None:
         raise ValueError(f"{field_name} 和 {field_name}_raw 至少提供一个")
     if text is not None and raw is not None:
@@ -43,10 +41,8 @@ class QuestionOption(RichTextModel):
 
     _rich_fields = (("text", "text_raw"),)
 
-    text: Optional[str] = Field(description=desc.OPTION_TEXT_DESC, default=None)
-    text_raw: Optional[RawRichText] = Field(
-        description=desc.OPTION_RAW_TEXT_DESC, default=None
-    )
+    text: str | None = Field(description=desc.OPTION_TEXT_DESC, default=None)
+    text_raw: RawRichText | None = Field(description=desc.OPTION_RAW_TEXT_DESC, default=None)
     answer: bool = Field(description=desc.OPTION_ANSWER_DESC)
 
 
@@ -67,9 +63,7 @@ class AnswerItem(BaseModel):
     """题目选项项"""
 
     seqno: str = Field(description=desc.STANDARD_SEQ_DESC, min_length=1)
-    context: Optional[str] = Field(
-        description=desc.ANSWER_ITEM_CONTEXT_DESC, default=None
-    )
+    context: str | None = Field(description=desc.ANSWER_ITEM_CONTEXT_DESC, default=None)
 
 
 class OfficeQuestionBase(BaseModel):
@@ -85,9 +79,7 @@ class OfficeStandardAnswerQuestionBase(OfficeQuestionBase):
 
 
 class OfficeChoiceQuestionBase(OfficeStandardAnswerQuestionBase):
-    answer_items: list[AnswerItem] = Field(
-        description=desc.ANSWER_ITEMS_LIST_DESC, min_length=1
-    )
+    answer_items: list[AnswerItem] = Field(description=desc.ANSWER_ITEMS_LIST_DESC, min_length=1)
 
 
 class SingleChoiceQuestionData(OfficeChoiceQuestionBase):
@@ -137,21 +129,19 @@ class OfficeCodeSetting(BaseModel):
         input: str = Field(description=desc.TEST_CASE_INPUT_DESC, default="")
         output: str = Field(description=desc.TEST_CASE_OUTPUT_DESC, default="")
 
-    answer_language: ProgrammingLanguage = Field(default=ProgrammingLanguage.C)
-    cases: list[Case_Type] = Field(
-        description=desc.TEST_CASE_LIST_DESC, default_factory=list
+    answer_language: ProgrammingLanguage = Field(
+        description=desc.ANSWER_LANGUAGE_DESC, default=ProgrammingLanguage.C
     )
+    cases: list[Case_Type] = Field(description=desc.TEST_CASE_LIST_DESC, default_factory=list)
     max_memory: int = Field(description=desc.PROGRAM_MAX_MEMORY_DESC, default=5000, gt=0)
     max_time: int = Field(description=desc.PROGRAM_MAX_TIME_DESC, default=1000, gt=0)
-    debug: AllowTrialRun = Field(ge=1, le=2, default=2)
-    debug_count: int = Field(
-        description=desc.DEBUG_COUNT_DESC, ge=0, le=9999, default=9999
-    )
-    example_code: Optional[str] = Field(description=desc.EXAMPLE_CODE_DESC, default=None)
-    example_language: Optional[ProgrammingLanguage] = Field(default=None)
+    debug: AllowTrialRun = Field(description=desc.DEBUG_DESC, ge=1, le=2, default=2)
+    debug_count: int = Field(description=desc.DEBUG_COUNT_DESC, ge=0, le=9999, default=9999)
+    example_code: str | None = Field(description=desc.EXAMPLE_CODE_DESC, default=None)
+    example_language: ProgrammingLanguage | None = Field(default=None)
     language: ProgrammingLanguage = Field(default=ProgrammingLanguage.C)
-    runcase: AllowTrialRun = Field(ge=1, le=2, default=2)
-    runcase_count: int = Field(ge=0, le=100, default=100)
+    runcase: AllowTrialRun = Field(description=desc.RUNCASE_DESC, ge=1, le=2, default=2)
+    runcase_count: int = Field(description=desc.RUNCASE_COUNT_DESC, ge=0, le=100, default=100)
 
 
 class CodeQuestionData(OfficeQuestionBase):
@@ -164,24 +154,18 @@ class CodeQuestionData(OfficeQuestionBase):
 class QuestionBase(RichTextModel):
     _rich_fields = (("title", "title_raw"),)
 
-    title: Optional[str] = Field(description=desc.QUESTION_RICH_TEXT_DESC, default=None)
-    title_raw: Optional[RawRichText] = Field(
+    title: str | None = Field(description=desc.QUESTION_RICH_TEXT_DESC, default=None)
+    title_raw: RawRichText | None = Field(
         description=desc.QUESTION_RAW_RICH_TEXT_DESC, default=None
     )
     description: str = Field(description=desc.ANSWER_EXPLANATION_DESC, min_length=1)
     score: int = Field(description=desc.QUESTION_SCORE_DESC, gt=0, default=2)
-    required: Optional[RequiredType] = Field(
-        description=desc.REQUIRED_DESC, default=RequiredType.YES
-    )
-    insert_question_id: Optional[str] = Field(
-        description=desc.INSERT_AFTER_DESC, default=None
-    )
+    required: RequiredType | None = Field(description=desc.REQUIRED_DESC, default=RequiredType.YES)
+    insert_question_id: str | None = Field(description=desc.INSERT_AFTER_DESC, default=None)
 
 
 class ChoiceQuestionBase(QuestionBase):
-    options: list[QuestionOption] = Field(
-        description=desc.QUESTION_OPTIONS_DESC, min_length=4
-    )
+    options: list[QuestionOption] = Field(description=desc.QUESTION_OPTIONS_DESC, min_length=4)
 
 
 class ChoiceQuestion(ChoiceQuestionBase):
@@ -207,14 +191,10 @@ class FillBlankQuestion(QuestionBase):
     """填空题"""
 
     type: Literal[QuestionType.FILL_BLANK] = QuestionType.FILL_BLANK
-    title: Optional[str] = Field(description=desc.FILL_BLANK_TITLE_DESC, default=None)
+    title: str | None = Field(description=desc.FILL_BLANK_TITLE_DESC, default=None)
     options: list[FillBlankAnswer] = Field(description=desc.FILL_BLANK_ANSWERS_DESC)
-    is_split_answer: Optional[bool] = Field(
-        description=desc.SPLIT_ANSWER_DESC, default=None
-    )
-    automatic_stat: Optional[AutoStatType] = Field(
-        description=desc.AUTO_STAT_DESC, default=None
-    )
+    is_split_answer: bool | None = Field(description=desc.SPLIT_ANSWER_DESC, default=None)
+    automatic_stat: AutoStatType | None = Field(description=desc.AUTO_STAT_DESC, default=None)
     automatic_type: AutoScoreType = Field(description=desc.AUTO_SCORE_DESC)
 
 
@@ -230,15 +210,15 @@ class ShortAnswerQuestion(QuestionBase):
     _rich_fields = QuestionBase._rich_fields + (("answer", "answer_raw"),)
 
     type: Literal[QuestionType.SHORT_ANSWER] = QuestionType.SHORT_ANSWER
-    answer: Optional[str] = Field(description=desc.REFERENCE_RICH_TEXT_DESC, default=None)
-    answer_raw: Optional[RawRichText] = Field(
+    answer: str | None = Field(description=desc.REFERENCE_RICH_TEXT_DESC, default=None)
+    answer_raw: RawRichText | None = Field(
         description=desc.REFERENCE_RAW_RICH_TEXT_DESC, default=None
     )
 
 
 class ProgramSettingBase(BaseModel):
-    id: Optional[str] = Field(description=desc.PROGRAM_SETTING_ID_DESC, default=None)
-    answer_item_id: Optional[str] = Field(
+    id: str | None = Field(description=desc.PROGRAM_SETTING_ID_DESC, default=None)
+    answer_item_id: str | None = Field(
         description=desc.PROGRAM_SETTING_ANSWER_ITEM_DESC, default=None
     )
 
@@ -247,39 +227,74 @@ _PROGRAM_FIELDS = dict(
     max_memory=desc.PROGRAM_MAX_MEMORY_DESC,
     max_time=desc.PROGRAM_MAX_TIME_DESC,
     debug_count=desc.DEBUG_COUNT_DESC,
+    runcase_count=desc.RUNCASE_COUNT_DESC,
     code_answer=desc.CODE_ANSWER_DESC,
     in_cases=desc.IN_CASES_DESC,
 )
 
 
 class ProgramSetting(ProgramSettingBase):
-    """编程题配置（更新用，所有字段可选）"""
+    """编程题配置（更新用，所有字段可选，传 None 则保持原值）"""
 
-    max_memory: Optional[int] = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=None)
-    max_time: Optional[int] = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=None)
-    debug: Optional[AllowTrialRun] = Field(ge=1, le=2, default=None)
-    debug_count: Optional[int] = Field(description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=None)
-    runcase: Optional[AllowTrialRun] = Field(ge=1, le=2, default=None)
-    runcase_count: Optional[int] = Field(ge=0, le=100, default=None)
-    language: Optional[list[ProgrammingLanguage]] = Field(default_factory=list, min_length=1)
-    answer_language: Optional[ProgrammingLanguage] = Field(default=None)
-    code_answer: Optional[str] = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
-    in_cases: Optional[list[dict[str, str]]] = Field(description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1)
+    max_memory: int | None = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=None)
+    max_time: int | None = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=None)
+    debug: AllowTrialRun | None = Field(description=desc.DEBUG_DESC, ge=1, le=2, default=None)
+    debug_count: int | None = Field(
+        description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=None
+    )
+    runcase: AllowTrialRun | None = Field(description=desc.RUNCASE_DESC, ge=1, le=2, default=None)
+    runcase_count: int | None = Field(
+        description=desc.RUNCASE_COUNT_DESC, ge=0, le=100, default=None
+    )
+    language: list[ProgrammingLanguage] | None = Field(
+        description=(
+            "允许学生提交的语言列表（至少 1 种）。常用组合：['python3'] 只收 Python；"
+            "['c', 'c++'] 只收 C 系列。"
+        ),
+        default_factory=list,
+        min_length=1,
+    )
+    answer_language: ProgrammingLanguage | None = Field(
+        description=desc.ANSWER_LANGUAGE_DESC, default=None
+    )
+    code_answer: str | None = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
+    in_cases: list[dict[str, str]] | None = Field(
+        description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1
+    )
 
 
 class ProgramSettingAllNeed(ProgramSettingBase):
-    """编程题配置（创建用，带默认值）"""
+    """编程题配置（创建用，带默认值）。
 
-    max_memory: int = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=1000)
+    默认值来自官方平台推荐：
+      - max_memory=5000 KB（<5000 时 Python 常规 import 可能内存超限）
+      - max_time=1000 ms
+      - debug=YES + debug_count=9999 （学生自测不限次数）
+      - runcase=YES + runcase_count=100 （学生跑全部测试用例不限次数）
+    除非老师明确要求限制，否则使用默认值即可。
+    """
+
+    max_memory: int = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=5000)
     max_time: int = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=1000)
-    debug: AllowTrialRun = Field(ge=1, le=2, default=2)
+    debug: AllowTrialRun = Field(description=desc.DEBUG_DESC, ge=1, le=2, default=2)
     debug_count: int = Field(description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=9999)
-    runcase: AllowTrialRun = Field(ge=1, le=2, default=2)
-    runcase_count: int = Field(ge=0, le=100, default=100)
-    language: list[ProgrammingLanguage] = Field(default_factory=list, min_length=1)
-    answer_language: Optional[ProgrammingLanguage] = Field(default=None)
-    code_answer: Optional[str] = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
-    in_cases: list[dict[str, str]] = Field(description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1)
+    runcase: AllowTrialRun = Field(description=desc.RUNCASE_DESC, ge=1, le=2, default=2)
+    runcase_count: int = Field(description=desc.RUNCASE_COUNT_DESC, ge=0, le=100, default=100)
+    language: list[ProgrammingLanguage] = Field(
+        description=(
+            "允许学生提交的语言列表（至少 1 种）。常用组合：['python3'] 只收 Python；"
+            "['c', 'c++'] 只收 C 系列；多语言题可 ['python3', 'java', 'c++']。"
+        ),
+        default_factory=list,
+        min_length=1,
+    )
+    answer_language: ProgrammingLanguage | None = Field(
+        description=desc.ANSWER_LANGUAGE_DESC, default=None
+    )
+    code_answer: str | None = Field(description=_PROGRAM_FIELDS["code_answer"], default=None)
+    in_cases: list[dict[str, str]] = Field(
+        description=_PROGRAM_FIELDS["in_cases"], default_factory=list, min_length=1
+    )
 
 
 class CodeQuestion(QuestionBase):

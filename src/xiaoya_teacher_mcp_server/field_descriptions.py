@@ -18,7 +18,9 @@ COURSE_ID_DESC = "课程id"
 COURSE_ID_FROM_ATTENDANCE_DESC = "课程id（来自 query_attendance_records 的 course_id 字段）"
 REGISTER_ID_DESC = "签到id（来自 query_attendance_records 的 id 字段）"
 MARK_MODE_ID_DESC = "阅卷模式id（来自 query_test_result 的 mark_mode_id 字段）"
-MARK_PAPER_RECORD_ID_DESC = "批阅记录id（来自 query_preview_student_paper 的 mark_paper_record_id 字段）"
+MARK_PAPER_RECORD_ID_DESC = (
+    "批阅记录id（来自 query_preview_student_paper 的 mark_paper_record_id 字段）"
+)
 PUBLISH_ID_DESC = "发布id（来自 query_group_tasks 的 publish_id 字段）"
 RECORD_ID_DESC = "答题记录id（来自 query_test_result 的 answer_records[].record_id 字段）"
 ANSWER_ID_DESC = "学生单题答案id（来自 query_preview_student_paper 的 questions[].answer_id 字段）"
@@ -35,7 +37,9 @@ RESOURCE_NAME_DESC = "资源名称"
 RESOURCE_NEW_NAME_DESC = "资源的新名称"
 FILENAME_DESC = "资源文件名（通过 query_course_resources 获取）"
 FILE_PATH_DESC = "本地磁盘文件路径"
-SAVE_PATH_DESC = "文件保存路径（不填则保存到临时文件夹）"
+SAVE_PATH_DESC = (
+    "文件保存路径：文件绝对路径 / 已存在的目录（将用原文件名拼）/ 不填则存到系统临时目录"
+)
 ROLE_DESC = "角色类型（3=教师）"
 
 # ── 分值 / 必答 ───────────────────────────────────────────────────────────────
@@ -45,7 +49,9 @@ REQUIRED_DESC = "是否必答（1=否 2=是）"
 INSERT_AFTER_DESC = "插入到指定题目ID后面（不填则追加到末尾）"
 
 # ── 批改 ──────────────────────────────────────────────────────────────────────
-CHECK_SCORE_DESC = "批改得分（不能超过题目满分）"
+CHECK_SCORE_DESC = (
+    "批改得分（0 ≤ score ≤ 该题满分，满分从 query_preview_student_paper 的 questions[].score 取）"
+)
 CHECK_COMMENT_DESC = "批改评语（可为空）"
 
 # ── 查询粒度 / 模式 ───────────────────────────────────────────────────────────
@@ -65,16 +71,16 @@ VISIBILITY_TYPE_DESC = "资源可见性（1=隐藏 2=可见）"
 QUESTION_TITLE_DESC = "题干"
 FILL_BLANK_TITLE_DESC = "题干（必须包含 ____ 作为填空占位符，有几个空就写几个 ____）"
 
-QUESTION_RICH_TEXT_DESC = "题干纯文本，与 title_raw 二选一（优先用 title_raw 以支持富文本格式）"
+QUESTION_RICH_TEXT_DESC = "题干纯文本（与 title_raw 二选一）。只在一两行的简单题目用；结构化题干（OJ、分小节）走 title_raw。"
 
 QUESTION_RAW_RICH_TEXT_DESC = (
-    "题干富文本（Draft.js 格式），与 title 二选一。\n"
-    "格式：{\"blocks\": [{\"text\": \"行内容\", \"type\": \"unstyled\", \"inlineStyleRanges\": []}, ...], \"entityMap\": {}}\n"
-    "  type 可选：unstyled（普通段落）| code-block（代码块）\n"
-    "           | ordered-list-item（有序列表）| unordered-list-item（无序列表）\n"
-    "  inlineStyleRanges 可选：[{\"offset\": 起始位, \"length\": 长度, \"style\": \"BOLD\"}]\n"
-    "    style 可选：BOLD | ITALIC | UNDERLINE | CODE\n"
-    "编程题建议分行：题目说明 → 输入格式 → 输出格式 → 样例输入 → 样例输出"
+    "题干富文本（Draft.js 格式），与 title 二选一，优先本字段。\n"
+    '格式：{"blocks": [...], "entityMap": {}}，每行一个 block，空行 = text="" 的 unstyled block。\n'
+    "block.type 常用：unstyled / header-one~six / code-block / ordered-list-item / unordered-list-item / blockquote。\n"
+    "inlineStyleRanges.style 常用：BOLD / ITALIC / UNDERLINE / CODE / lineThrough / color-red / backgroundColor-#ffff02 / fontSize-20。\n"
+    "offset/length 以 UTF-16 单位计数（中文一字 1 单位）。\n"
+    "美化要点：小标题【XX】整段 BOLD、小节间留空行、样例用 code-block、关键词用 CODE 或 color-blue；\n"
+    "完整支持矩阵见 xiaoya-teacher-skill/references/title_rich_text.md。"
 )
 
 OPTION_TEXT_DESC = "选项纯文本，与 text_raw 二选一"
@@ -113,30 +119,42 @@ CODE_QUESTION_DESC = (
 )
 
 # ── 编程题配置 ────────────────────────────────────────────────────────────────
-PROGRAM_SETTING_DESC = "编程题配置（语言、参考答案、测试用例、内存/时间限制）"
-PROGRAM_SETTING_OPTIONAL_DESC = "编程题配置（仅编程题需要填写）"
-PROGRAM_SETTING_ID_DESC = "编程配置ID（内部字段，创建时由系统自动赋值，无需手动填写）"
-PROGRAM_SETTING_ANSWER_ITEM_DESC = "编程答案项ID（内部字段，创建时由系统自动赋值，无需手动填写）"
-ANSWER_LANGUAGE_DESC = "参考答案代码语言（如 python3 / c / java 等）"
-CODE_ANSWER_DESC = "参考答案代码（用 \\n 换行，需能独立运行并产生正确输出）"
-RUN_CODE_ANSWER_DESC = "运行测试用的参考代码（需能根据输入产生正确输出）"
+PROGRAM_SETTING_DESC = (
+    "编程题配置。必填：language / answer_language / code_answer / in_cases。"
+    "其他字段默认值即官方推荐，通常不用动；max_memory 低于 5000 时 Python 的 collections 等常规 import 会超限。"
+)
+PROGRAM_SETTING_OPTIONAL_DESC = "编程题配置（仅编程题需要，规则同 PROGRAM_SETTING_DESC）"
+PROGRAM_SETTING_ID_DESC = "编程配置 ID（内部字段，系统自动赋值，无需手填）"
+PROGRAM_SETTING_ANSWER_ITEM_DESC = "编程答案项 ID（内部字段，系统自动赋值，无需手填）"
+ANSWER_LANGUAGE_DESC = (
+    "参考答案语言，必须和 code_answer 实际语言一致（c / c++ / java / python3 / go / rust 等 20 种）"
+)
+CODE_ANSWER_DESC = (
+    "参考答案代码（字符串，用 \\n 换行）。"
+    "约束：同一输入必须给出确定输出（无随机/时间/IO 依赖）；平台会用它对每条 in_cases 生成期望输出。"
+)
+RUN_CODE_ANSWER_DESC = "运行测试用的参考代码（规则同 CODE_ANSWER_DESC）"
 IN_CASES_DESC = (
-    "测试用例输入列表，格式：[{\"in\": \"输入内容\"}, ...]。\n"
-    "平台自动运行参考答案生成期望输出，每条只需提供输入。\n"
-    "多行输入用 \\n 分隔，如 {\"in\": \"3\\n4\"}"
+    '测试用例输入列表，格式 [{"in": "内容"}, ...]，至少 1 条。'
+    "只传输入，期望输出由平台跑 code_answer 自动生成；多行输入一条里用 \\n 分隔。"
 )
 
-TEST_CASE_LIST_DESC = "测试用例列表（含输入和期望输出）"
-TEST_CASE_INPUT_DESC = "测试输入"
-TEST_CASE_OUTPUT_DESC = "期望输出"
-PROGRAM_MAX_MEMORY_DESC = "内存限制（KB，默认 5000）"
-PROGRAM_MAX_TIME_DESC = "时间限制（ms，默认 1000）"
-DEBUG_COUNT_DESC = "试运行次数上限（0=禁用，9999=不限）"
-EXAMPLE_CODE_DESC = "示例代码"
+TEST_CASE_LIST_DESC = "测试用例列表（含输入 + 期望输出，仅 office_create_questions 通道用）"
+TEST_CASE_INPUT_DESC = "测试输入（一条样例的 stdin，多行用 \\n 分隔）"
+TEST_CASE_OUTPUT_DESC = "期望输出（仅 office 批量通道需要手填）"
+PROGRAM_MAX_MEMORY_DESC = "内存限制（KB，默认 5000；低于 5000 时 Python 常规 import 可能内存超限）"
+PROGRAM_MAX_TIME_DESC = "时间限制（ms，默认 1000；大规模循环/递归题可升到 2000~3000）"
+DEBUG_COUNT_DESC = "学生试运行次数上限（默认 9999 不限；0 禁用）"
+RUNCASE_COUNT_DESC = "学生跑测试用例次数上限（默认 100 不限；0 禁用）"
+DEBUG_DESC = "是否允许学生试运行（1=禁用 2=允许，默认 2）"
+RUNCASE_DESC = "是否允许学生运行测试用例（1=禁用 2=允许，默认 2）"
+EXAMPLE_CODE_DESC = "学生代码框的初始内容（一般留空或给函数签名）"
 
 # ── 其他 ──────────────────────────────────────────────────────────────────────
 ATTENDANCE_LIST_DESC = "签到用户列表"
-AUTO_SCORE_DESC = "自动评分类型（1=精确匹配+有序 2=部分匹配+有序 11=精确匹配+无序 12=部分匹配+无序）"
+AUTO_SCORE_DESC = (
+    "自动评分类型（1=精确匹配+有序 2=部分匹配+有序 11=精确匹配+无序 12=部分匹配+无序）"
+)
 AUTO_STAT_DESC = "是否开启自动评分（1=关闭 2=开启）"
 SPLIT_ANSWER_DESC = "是否允许每个空有多个答案（仅填空题，true=允许）"
 RANDOMIZE_QUESTION_DESC = "题目顺序随机（1=关闭 2=开启）"
