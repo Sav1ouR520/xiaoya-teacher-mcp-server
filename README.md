@@ -1,6 +1,6 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.3.2-blue)
+![版本](https://img.shields.io/badge/版本-1.3.3-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)

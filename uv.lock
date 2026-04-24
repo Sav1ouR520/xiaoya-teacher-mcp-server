@@ -1910,7 +1910,7 @@ wheels = [
 
 [[package]]
 name = "xiaoya-teacher-mcp-server"
-version = "1.3.2"
+version = "1.3.3"
 source = { editable = "." }
 dependencies = [
     { name = "markitdown", extra = ["all"] },

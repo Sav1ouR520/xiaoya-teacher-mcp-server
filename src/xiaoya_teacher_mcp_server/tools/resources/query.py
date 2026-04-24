@@ -8,16 +8,16 @@ from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import quote
 
+import requests
 from markitdown import MarkItDown
 from pydantic import Field
 
 from ... import field_descriptions as desc
-from ...config import DOWNLOAD_URL, MAIN_URL, MCP
+from ...config import DOWNLOAD_URL, HEADERS, MAIN_URL, MCP
 from ...utils.client import (
     APIRequestError,
     expect_success,
     get_json,
-    request_response,
 )
 from ...utils.response import ResponseUtil
 from .normalize import build_resource_map, build_resource_tree
@@ -58,7 +58,22 @@ def _get_download_url(paper_id: str, filename: str) -> str:
 
 
 def _fetch_download_response(paper_id: str, filename: str, *, stream: bool = False):
-    return request_response("GET", _get_download_url(paper_id, filename), stream=stream, timeout=20)
+    try:
+        response = requests.get(
+            _get_download_url(paper_id, filename),
+            headers={"User-Agent": HEADERS["User-Agent"]},
+            stream=stream,
+            timeout=20,
+        )
+        response.raise_for_status()
+        return response
+    except requests.Timeout as exc:
+        raise APIRequestError("HTTP 请求超时") from exc
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "unknown"
+        raise APIRequestError(f"HTTP 请求失败: {status_code}") from exc
+    except requests.RequestException as exc:
+        raise APIRequestError(f"HTTP 请求失败: {exc.__class__.__name__}") from exc
 
 
 def _build_resource_summary_view(raw_data: list[dict[str, Any]], view_mode: str) -> Any:

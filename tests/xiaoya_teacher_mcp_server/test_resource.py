@@ -260,6 +260,39 @@ def test_query_group_order_setting(monkeypatch):
     assert result["data"] == {"is_setting": False, "setting_order": None}
 
 
+def test_fetch_download_response_does_not_send_app_authorization(monkeypatch):
+    captured = {}
+
+    class DummyResponse:
+        status_code = 200
+        content = b"PK\x03\x04"
+        headers = {
+            "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        }
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(
+        resource_query,
+        "_get_download_url",
+        lambda paper_id, filename: "https://oss.example.test/signed-url",
+    )
+
+    def fake_get(url, *, headers, stream, timeout):
+        captured.update(url=url, headers=headers, stream=stream, timeout=timeout)
+        return DummyResponse()
+
+    monkeypatch.setattr(resource_query.requests, "get", fake_get)
+
+    response = resource_query._fetch_download_response("paper-1", "课件.pptx", stream=True)
+
+    assert response.content == b"PK\x03\x04"
+    assert captured["url"] == "https://oss.example.test/signed-url"
+    assert captured["stream"] is True
+    assert captured["headers"] == {"User-Agent": resource_query.HEADERS["User-Agent"]}
+
+
 def test_query_course_resources_defaults_to_summary(monkeypatch):
     monkeypatch.setattr(
         resource_query,
