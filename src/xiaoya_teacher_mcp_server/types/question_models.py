@@ -277,7 +277,9 @@ class ProgramSettingAllNeed(ProgramSettingBase):
     max_memory: int = Field(description=_PROGRAM_FIELDS["max_memory"], gt=0, default=5000)
     max_time: int = Field(description=_PROGRAM_FIELDS["max_time"], gt=0, default=1000)
     debug: AllowTrialRun = Field(description=desc.DEBUG_DESC, ge=1, le=2, default=2)
-    debug_count: int = Field(description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=9999)
+    debug_count: int = Field(
+        description=_PROGRAM_FIELDS["debug_count"], ge=0, le=9999, default=9999
+    )
     runcase: AllowTrialRun = Field(description=desc.RUNCASE_DESC, ge=1, le=2, default=2)
     runcase_count: int = Field(description=desc.RUNCASE_COUNT_DESC, ge=0, le=100, default=100)
     language: list[ProgrammingLanguage] = Field(
