@@ -1,0 +1,13 @@
+interface:
+  display_name: "小雅教学助手"
+  short_description: "XiaoYa courses, papers, grading, attendance"
+  default_prompt: "Use $xiaoya-teacher-skill when a teacher needs to operate XiaoYa platform courses, papers, resources, grading, attendance, or MCP setup."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "xiaoya-teacher-mcp-server"
+      description: "MCP server that exposes XiaoYa teaching platform tools"
+
+policy:
+  allow_implicit_invocation: true

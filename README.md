@@ -7,7 +7,7 @@
 
 专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、题目创建、试卷配置、班级查询、签到统计、任务测验与批阅等能力。
 
-默认安装采用精简依赖，适合本地 editable、`uv tool` 和标准发布包；如需完整文档格式转换能力，可额外安装 `full` extra。
+默认安装包含常用文档转换依赖，适合本地 editable、`uv tool` 和标准发布包。
 
 ## ✨ 核心特性
 
@@ -58,15 +58,6 @@ uv sync --dev
 
 # 运行服务器
 uv run xiaoya-teacher-mcp-server
-```
-
-### 完整文档转换支持
-```bash
-# 本地开发时启用 full extra
-uv sync --dev --extra full
-
-# 发布安装时启用 full extra
-pip install "xiaoya-teacher-mcp-server[full]"
 ```
 
 ### 本机工具安装
@@ -257,6 +248,10 @@ xiaoya-teacher-mcp-server/
 ├── pyproject.toml         # 打包配置
 ├── README.md              # 项目文档
 ├── hatch_build.py         # Hatchling 打包钩子
+├── xiaoya-teacher-skill/  # AI 助手 skill，封装小雅平台操作流程
+│   ├── SKILL.md
+│   ├── agents/openai.yaml
+│   └── references/        # 安装配置、操作链路和富文本参考
 ├── src/
 │   └── xiaoya_teacher_mcp_server/
 │       ├── config.py              # 配置文件和认证模块

@@ -45,6 +45,7 @@ only-include = [
     "/README.md",
     "/LICENSE",
     "/pyproject.toml",
+    "/xiaoya-teacher-skill",
 ]
 
 [tool.hatch.build.targets.wheel]

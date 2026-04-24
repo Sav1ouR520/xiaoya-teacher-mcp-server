@@ -2,7 +2,7 @@
 
 当老师反馈工具调用失败或找不到工具时，引导他们完成以下配置。
 
-## Claude Desktop / Cursor 配置
+## 通用 MCP 配置
 
 在 MCP 配置文件中添加（推荐账号密码方式，自动登录和缓存）：
 
@@ -36,6 +36,35 @@
 }
 ```
 
+## Codex / OpenAI Agents
+
+在支持 MCP 的 Codex 或 OpenAI agent 环境中，服务名保持为：
+
+```text
+xiaoya-teacher-mcp-server
+```
+
+本地 stdio 启动命令：
+
+```text
+uvx xiaoya-teacher-mcp-server
+```
+
+环境变量认证仍使用：
+
+```text
+XIAOYA_ACCOUNT=你的小雅账号
+XIAOYA_PASSWORD=你的小雅密码
+```
+
+或：
+
+```text
+XIAOYA_AUTH_TOKEN=你的Bearer Token
+```
+
+如果 agent 能看到工具但调用返回认证失败，先调用 `server_status` 确认服务在线，再调用 `auth_status(refresh=true)` 检查登录状态。
+
 ## 远程部署（多人共用）
 
 启用 SSE 或 Streamable HTTP 传输：
@@ -53,4 +82,10 @@
 ```
 X-XIAOYA-ACCOUNT: 账号
 X-XIAOYA-PASSWORD: 密码
+```
+
+也可以用：
+
+```text
+Authorization: Bearer 你的Token
 ```
