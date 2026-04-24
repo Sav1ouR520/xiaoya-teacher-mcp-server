@@ -9,8 +9,8 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Build and verify only; do not upload to PyPI"
+      publish:
+        description: "Publish to PyPI after checks pass"
         required: false
         default: false
         type: boolean
@@ -27,42 +27,6 @@ defaults:
     shell: bash
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.11"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.11"
-          enable-cache: true
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-          cache-suffix: lint-3.11
-          ignore-nothing-to-cache: true
-
-      - name: Check lockfile
-        run: uv lock --check
-
-      - name: Install dependencies
-        run: uv sync --locked --group dev
-
-      - name: Run Ruff lint
-        run: uv run --locked ruff check .
-
-      - name: Check formatting
-        run: uv run --locked ruff format --check .
-
   test:
     name: Test (${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -73,15 +37,15 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -92,10 +56,19 @@ jobs:
           ignore-nothing-to-cache: true
 
       - name: Check lockfile
+        if: matrix.python-version == '3.11'
         run: uv lock --check
 
       - name: Install dependencies
         run: uv sync --locked --group dev
+
+      - name: Run Ruff lint
+        if: matrix.python-version == '3.11'
+        run: uv run --locked ruff check .
+
+      - name: Check formatting
+        if: matrix.python-version == '3.11'
+        run: uv run --locked ruff format --check .
 
       - name: Run tests
         run: uv run --locked pytest -v tests/
@@ -104,21 +77,18 @@ jobs:
     name: Build distribution
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [lint, test]
-    permissions:
-      contents: read
-      id-token: write
+    needs: test
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.11"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: "3.11"
           enable-cache: true
@@ -128,22 +98,35 @@ jobs:
           cache-suffix: build-3.11
           ignore-nothing-to-cache: true
 
-      - name: Check lockfile
-        run: uv lock --check
-
       - name: Build distribution
         run: uv build
 
       - name: Upload distribution
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
           name: dist
           path: dist/
           if-no-files-found: error
           retention-days: 7
-      - name: Verify publish command
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-        run: uv publish --trusted-publishing always --dry-run dist/*
+
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish) }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+
+      - name: Download distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dist
+          path: dist/
+
       - name: Publish to PyPI
-        if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
         run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/xiaoya-teacher-mcp-server/ dist/*
