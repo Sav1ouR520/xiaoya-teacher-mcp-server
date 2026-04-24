@@ -1,15 +1,13 @@
-name: CI
+name: Release
 
 on:
-  push:
-    branches: [master, main]
-  pull_request:
-    branches: [master, main]
+  release:
+    types: [published]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -20,13 +18,9 @@ defaults:
 
 jobs:
   test:
-    name: Test (${{ matrix.python-version }})
+    name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -34,42 +28,42 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
             uv.lock
-          cache-suffix: test-${{ matrix.python-version }}
+          cache-suffix: release-3.11
           ignore-nothing-to-cache: true
 
       - name: Check lockfile
-        if: matrix.python-version == '3.11'
         run: uv lock --check
 
       - name: Install dependencies
         run: uv sync --locked --group dev
 
       - name: Run Ruff lint
-        if: matrix.python-version == '3.11'
         run: uv run --locked ruff check .
 
       - name: Check formatting
-        if: matrix.python-version == '3.11'
         run: uv run --locked ruff format --check .
 
       - name: Run tests
-        run: uv run --locked pytest -v tests/
+        run: uv run --locked pytest -q
 
-  build:
-    name: Build distribution
+  publish:
+    name: Publish to PyPI
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: test
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -83,20 +77,9 @@ jobs:
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: "3.11"
-          enable-cache: true
-          cache-dependency-glob: |
-            pyproject.toml
-            uv.lock
-          cache-suffix: build-3.11
-          ignore-nothing-to-cache: true
 
       - name: Build distribution
         run: uv build
 
-      - name: Upload distribution
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
-        with:
-          name: dist
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/xiaoya-teacher-mcp-server/ dist/*
