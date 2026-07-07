@@ -37,9 +37,10 @@ Read `references/operations.md` before executing the matching workflow; it conta
 - `batch_create_questions` is not transactional. Always inspect `data.failed_items` on partial failure.
 - For code questions, only pass necessary `program_setting` fields unless the teacher explicitly requests limits.
 - For manual grading, use the exact ID chain from `operations.md#grading`; do not substitute `answer_id`, `record_id`, or `quote_id` for each other.
+- Submitted grading can be changed only after explicitly reopening the student's mark with `withdraw_student_mark` or `revise_student_mark(allow_reopen=true)`.
 
 ## References
 
 - [operations.md](references/operations.md): tool workflows, parameters, and XiaoYa-specific pitfalls.
-- [title_rich_text.md](references/title_rich_text.md): `title_raw` Draft.js block/style reference for rich question text.
+- [title_rich_text.md](references/title_rich_text.md): Markdown rich text, `asset://id` image/attachment placeholders, and `title_raw` Draft.js block/style reference.
 - [setup.md](references/setup.md): MCP installation, auth, transport, and troubleshooting.

@@ -15,13 +15,25 @@ from .enums import (
 )
 
 RawRichText = dict[str, Any]
+RichTextAsset = dict[str, Any]
 
 
-def _validate_text_or_raw_input(text: str | None, raw: RawRichText | None, field_name: str) -> None:
-    if text is None and raw is None:
-        raise ValueError(f"{field_name} 和 {field_name}_raw 至少提供一个")
-    if text is not None and raw is not None:
-        raise ValueError(f"{field_name} 和 {field_name}_raw 不能同时提供")
+def _validate_rich_text_input(
+    text: str | None,
+    markdown: str | None,
+    raw: RawRichText | None,
+    assets: list[RichTextAsset] | None,
+    field_name: str,
+    raw_field_name: str,
+) -> None:
+    field_names = (field_name, f"{field_name}_md", raw_field_name)
+    provided = [value is not None for value in (text, markdown, raw)]
+    if not any(provided):
+        raise ValueError(f"{'、'.join(field_names)} 至少提供一个")
+    if sum(provided) > 1:
+        raise ValueError(f"{'、'.join(field_names)} 只能提供一个")
+    if assets and markdown is None:
+        raise ValueError(f"{field_name}_assets 只能和 {field_name}_md 一起使用")
 
 
 class RichTextModel(BaseModel):
@@ -30,8 +42,13 @@ class RichTextModel(BaseModel):
     @model_validator(mode="after")
     def validate_rich_fields(self):
         for text_field, raw_field in self._rich_fields:
-            _validate_text_or_raw_input(
-                getattr(self, text_field), getattr(self, raw_field), text_field
+            _validate_rich_text_input(
+                getattr(self, text_field),
+                getattr(self, f"{text_field}_md", None),
+                getattr(self, raw_field),
+                getattr(self, f"{text_field}_assets", None),
+                text_field,
+                raw_field,
             )
         return self
 
@@ -42,6 +59,10 @@ class QuestionOption(RichTextModel):
     _rich_fields = (("text", "text_raw"),)
 
     text: str | None = Field(description=desc.OPTION_TEXT_DESC, default=None)
+    text_md: str | None = Field(description=desc.OPTION_MARKDOWN_TEXT_DESC, default=None)
+    text_assets: list[RichTextAsset] | None = Field(
+        description=desc.OPTION_MARKDOWN_ASSETS_DESC, default=None
+    )
     text_raw: RawRichText | None = Field(description=desc.OPTION_RAW_TEXT_DESC, default=None)
     answer: bool = Field(description=desc.OPTION_ANSWER_DESC)
 
@@ -155,6 +176,10 @@ class QuestionBase(RichTextModel):
     _rich_fields = (("title", "title_raw"),)
 
     title: str | None = Field(description=desc.QUESTION_RICH_TEXT_DESC, default=None)
+    title_md: str | None = Field(description=desc.QUESTION_MARKDOWN_RICH_TEXT_DESC, default=None)
+    title_assets: list[RichTextAsset] | None = Field(
+        description=desc.QUESTION_MARKDOWN_ASSETS_DESC, default=None
+    )
     title_raw: RawRichText | None = Field(
         description=desc.QUESTION_RAW_RICH_TEXT_DESC, default=None
     )
@@ -211,6 +236,10 @@ class ShortAnswerQuestion(QuestionBase):
 
     type: Literal[QuestionType.SHORT_ANSWER] = QuestionType.SHORT_ANSWER
     answer: str | None = Field(description=desc.REFERENCE_RICH_TEXT_DESC, default=None)
+    answer_md: str | None = Field(description=desc.REFERENCE_MARKDOWN_RICH_TEXT_DESC, default=None)
+    answer_assets: list[RichTextAsset] | None = Field(
+        description=desc.REFERENCE_MARKDOWN_ASSETS_DESC, default=None
+    )
     answer_raw: RawRichText | None = Field(
         description=desc.REFERENCE_RAW_RICH_TEXT_DESC, default=None
     )

@@ -43,13 +43,13 @@ Minimum `program_setting`: `language`, `code_answer`, `in_cases`; set `answer_la
 
 Do not override `max_memory`, `max_time`, `debug_count`, or `runcase_count` unless the teacher explicitly asks. Custom limits have caused platform HTTP 400 failures.
 
-For rich code-question text, use `title_raw`; see `title_rich_text.md`.
+For rich code-question text, prefer `title_md` when the source is Markdown. Use `title_assets` for images/attachments referenced as `asset://id`. Use `title_raw` only when you need exact Draft.js control; see `title_rich_text.md`.
 
 ### Paper Settings
 
 After question creation, use:
 
-- `query_paper_summary` to report question count, type counts, and total score.
+- `query_paper_summary` to report question count, type counts, and total score. Use `query_paper(..., detail_level="full", parse_mode="markdown")` when the next step is AI editing or round-tripping rich text.
 - `configure_paper_basics` for required, question shuffle, option shuffle, and score mode.
 - `update_paper_question_order` for order changes.
 - `update_paper_randomization` for randomization-only changes.
@@ -85,7 +85,7 @@ Use this chain exactly:
 
 1. `query_group_tasks(group_id)` to choose a published task and get `paper_id` + `publish_id`.
 2. `query_test_result(group_id, paper_id, publish_id, detail_level="full")` to get `mark_mode_id` and each student's `record_id`.
-3. For manual grading or answer inspection, call `query_preview_student_paper(group_id, paper_id, mark_mode_id, publish_id, record_id, detail_level="full", parse_mode="plain")`.
+3. For manual grading or answer inspection, call `query_preview_student_paper(group_id, paper_id, mark_mode_id, publish_id, record_id, detail_level="full", parse_mode="plain")`. Use `parse_mode="markdown"` only when the answer content will be edited or reused as Markdown.
 4. Read `mark_paper_record_id` from the preview result. For each manually graded question, read `question_id`, `answer_id`, maximum `score`, and current answer content.
 5. For attachment questions, read `attachments[].quote_id` from the matching full-preview question. Do not use `answer_id`, `question_id`, or `record_id` as `quote_id`.
 6. Call `get_answer_file(quote_id, save_path=...)` for images/PDFs/large files so the file lands on disk. Use base64 mode only for small text extraction.
@@ -93,6 +93,8 @@ Use this chain exactly:
 8. After all manual questions for that student are graded, call `submit_student_mark(group_id, answer_record_id=record_id, mark_mode_id, mark_paper_record_id)`.
 
 Automatically scored choice/true-false/fill-blank/code questions usually do not need `grade_student_question`.
+
+If a student's mark has already been submitted and the teacher confirms a change, call `withdraw_student_mark(group_id, answer_record_id=record_id, mark_mode_id, mark_paper_record_id)` first. Then re-grade the affected question and call `submit_student_mark` again. For a single tool call, use `revise_student_mark(..., allow_reopen=true, submit_after=true)` only after the teacher explicitly confirms reopening a submitted grade.
 
 ## Attendance
 

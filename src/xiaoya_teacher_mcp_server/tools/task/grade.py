@@ -30,6 +30,7 @@ def grade_student_question(
 
     何时调用：仅简答题（type=6）和附件题（type=7）需要；选择/填空/判断/编程系统自动评分，跳过。
     score 上限 = query_preview_student_paper 返回的该题 score 字段；未 submit 前可重复打分覆盖。
+    若整卷已提交批阅，先调用 withdraw_student_mark 重开，再重新打分。
     四步流程：query_test_result → query_preview_student_paper → grade_student_question → submit_student_mark。
     """
     try:
@@ -63,7 +64,7 @@ def submit_student_mark(
     """[批改 4/4] 提交整卷批阅结果。
 
     调用前需对该卷所有需手工批改的题都执行过 grade_student_question；
-    本工具一旦成功，该学生本卷的分数即写入学生端，不可再改。
+    本工具成功后成绩写入学生端。若之后确需修改，必须先调用 withdraw_student_mark 重开批阅。
     """
     try:
         data = expect_success(
@@ -80,6 +81,136 @@ def submit_student_mark(
         return ResponseUtil.success(data, "提交批阅成功")
     except APIRequestError as e:
         return ResponseUtil.error("提交批阅失败", e)
+
+
+@MCP.tool()
+def withdraw_student_mark(
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
+    answer_record_id: Annotated[str, Field(description=desc.RECORD_ID_DESC)],
+    mark_mode_id: Annotated[str, Field(description=desc.MARK_MODE_ID_DESC)],
+    mark_paper_record_id: Annotated[str, Field(description=desc.MARK_PAPER_RECORD_ID_DESC)],
+    is_teacher_recheck: Annotated[
+        bool,
+        Field(
+            description=(
+                "是否为复评/教师重批模式。普通整卷批阅填 false；"
+                "复评模式填 true，会调用 review reset 接口。"
+            ),
+            default=False,
+        ),
+    ] = False,
+) -> dict:
+    """重开已提交的学生整卷批阅，使分数和评语可以再次修改。
+
+    调用前必须确认老师确实要修改已提交成绩。重开后通常继续调用
+    grade_student_question 或 revise_student_mark，再调用 submit_student_mark 重新提交。
+    """
+    endpoint = "review" if is_teacher_recheck else "normal"
+    try:
+        data = expect_success(
+            post_json(
+                f"{MAIN_URL}/survey/course/{endpoint}/mark/reset",
+                payload={
+                    "group_id": str(group_id),
+                    "answer_record_id": str(answer_record_id),
+                    "mark_mode_id": str(mark_mode_id),
+                    "mark_paper_record_id": str(mark_paper_record_id),
+                },
+            )
+        )
+        return ResponseUtil.success(data, "批阅已重开，可重新修改分数和评语")
+    except APIRequestError as e:
+        return ResponseUtil.error("重开批阅失败", e)
+
+
+@MCP.tool()
+def revise_student_mark(
+    group_id: Annotated[str, Field(description=desc.GROUP_ID_DESC)],
+    publish_id: Annotated[str, Field(description=desc.PUBLISH_ID_DESC)],
+    mark_paper_record_id: Annotated[str, Field(description=desc.MARK_PAPER_RECORD_ID_DESC)],
+    record_id: Annotated[str, Field(description=desc.RECORD_ID_DESC)],
+    mark_mode_id: Annotated[str, Field(description=desc.MARK_MODE_ID_DESC)],
+    question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
+    answer_id: Annotated[str, Field(description=desc.ANSWER_ID_DESC)],
+    score: Annotated[float, Field(description=desc.CHECK_SCORE_DESC, ge=0)],
+    comment: Annotated[str, Field(description=desc.CHECK_COMMENT_DESC, default="")] = "",
+    allow_reopen: Annotated[
+        bool,
+        Field(
+            description=(
+                "是否允许先重开已提交批阅。默认 false，避免无意修改已发布成绩；"
+                "确认要改已提交成绩时设为 true。"
+            ),
+            default=False,
+        ),
+    ] = False,
+    submit_after: Annotated[
+        bool,
+        Field(description="修改后是否立即重新提交整卷批阅。默认 false。", default=False),
+    ] = False,
+    is_teacher_recheck: Annotated[
+        bool,
+        Field(
+            description="重开时是否使用复评 reset 接口。仅 allow_reopen=true 时生效。",
+            default=False,
+        ),
+    ] = False,
+) -> dict:
+    """修改学生某题分数/评语，可选重开已提交批阅并重新提交。
+
+    默认只覆盖未提交批阅中的单题分数。若成绩已经提交，调用方必须显式传
+    allow_reopen=true，工具才会先重开批阅。
+    """
+    steps: list[str] = []
+
+    if allow_reopen:
+        reopened = withdraw_student_mark(
+            group_id=group_id,
+            answer_record_id=record_id,
+            mark_mode_id=mark_mode_id,
+            mark_paper_record_id=mark_paper_record_id,
+            is_teacher_recheck=is_teacher_recheck,
+        )
+        if not reopened.get("success"):
+            return ResponseUtil.error("修改批阅失败: 重开批阅未成功", data=reopened)
+        steps.append("reopened")
+
+    graded = grade_student_question(
+        group_id=group_id,
+        publish_id=publish_id,
+        mark_paper_record_id=mark_paper_record_id,
+        record_id=record_id,
+        question_id=question_id,
+        answer_id=answer_id,
+        score=score,
+        comment=comment,
+    )
+    if not graded.get("success"):
+        return ResponseUtil.error("修改批阅失败: 题目打分未成功", data=graded)
+    steps.append("graded")
+
+    submitted = None
+    if submit_after:
+        submitted = submit_student_mark(
+            group_id=group_id,
+            answer_record_id=record_id,
+            mark_mode_id=mark_mode_id,
+            mark_paper_record_id=mark_paper_record_id,
+        )
+        if not submitted.get("success"):
+            return ResponseUtil.error("修改批阅失败: 重新提交未成功", data=submitted)
+        steps.append("submitted")
+
+    return ResponseUtil.success(
+        {
+            "steps": steps,
+            "allow_reopen": allow_reopen,
+            "submit_after": submit_after,
+            "grade_result": graded.get("data"),
+            "submit_result": submitted.get("data") if submitted else None,
+        },
+        "批阅修改完成",
+    )
 
 
 @MCP.tool()

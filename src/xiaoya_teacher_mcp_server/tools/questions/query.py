@@ -45,7 +45,7 @@ def query_paper(
         Field(
             description=desc.PARSE_MODE_DESC,
             default="plain",
-            pattern="^(plain|raw)$",
+            pattern="^(plain|raw|markdown)$",
         ),
     ] = "plain",
 ) -> dict:

@@ -3,9 +3,10 @@ import json
 import pytest
 import requests
 
+from xiaoya_teacher_mcp_server.config import DOWNLOAD_URL
 from xiaoya_teacher_mcp_server.tools.questions import create
 from xiaoya_teacher_mcp_server.types import AutoScoreType, FillBlankAnswer, FillBlankQuestion
-from xiaoya_teacher_mcp_server.utils import client, rich_text
+from xiaoya_teacher_mcp_server.utils import client, rich_text, upload
 from xiaoya_teacher_mcp_server.utils.response import ResponseUtil
 
 
@@ -142,6 +143,208 @@ def test_normalize_rich_text_input_prefers_raw():
     raw = {"blocks": [{"text": "raw title"}], "entityMap": {}}
 
     assert json.loads(rich_text.normalize_rich_text_input(text="plain title", raw=raw)) == raw
+
+
+def test_markdown_to_rich_text_raw_maps_common_blocks():
+    raw = json.loads(
+        rich_text.markdown_to_rich_text_raw(
+            "\n".join(
+                [
+                    "# 标题",
+                    "",
+                    "普通段落",
+                    "- 项一",
+                    "1. 第一步",
+                    "> 引用内容",
+                    "```python",
+                    "print('hi')",
+                    "```",
+                ]
+            )
+        )
+    )
+
+    blocks = raw["blocks"]
+    assert [(block["type"], block["text"]) for block in blocks] == [
+        ("header-one", "标题"),
+        ("unstyled", ""),
+        ("unstyled", "普通段落"),
+        ("unordered-list-item", "项一"),
+        ("ordered-list-item", "第一步"),
+        ("blockquote", "引用内容"),
+        ("code-block", "print('hi')"),
+    ]
+    assert raw["entityMap"] == {}
+
+
+def test_markdown_to_rich_text_raw_uses_utf16_offsets_for_inline_styles():
+    raw = json.loads(rich_text.markdown_to_rich_text_raw("A😀**中**、*斜*、`码`"))
+    block = raw["blocks"][0]
+
+    assert block["text"] == "A😀中、斜、码"
+    assert block["inlineStyleRanges"] == [
+        {"offset": 3, "length": 1, "style": "BOLD"},
+        {"offset": 5, "length": 1, "style": "ITALIC"},
+        {"offset": 7, "length": 1, "style": "CODE"},
+    ]
+
+
+def test_normalize_rich_text_input_accepts_markdown():
+    raw = json.loads(rich_text.normalize_rich_text_input(markdown="## 小节\n\n`code`"))
+
+    assert raw["blocks"][0]["type"] == "header-two"
+    assert raw["blocks"][0]["text"] == "小节"
+    assert raw["blocks"][2]["text"] == "code"
+    assert raw["blocks"][2]["inlineStyleRanges"] == [{"offset": 0, "length": 4, "style": "CODE"}]
+
+
+def test_markdown_to_rich_text_raw_embeds_uploaded_assets_like_web_editor():
+    uploaded_assets = {
+        "img_1": {
+            "id": "img_1",
+            "type": "image",
+            "name": "节点图.png",
+            "quote_id": "quote-1",
+            "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+        },
+        "file_1": {
+            "id": "file_1",
+            "type": "attachment",
+            "name": "实验附件.zip",
+            "quote_id": "quote-2",
+            "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-2",
+        },
+    }
+
+    raw = json.loads(
+        rich_text.markdown_to_rich_text_raw(
+            "题干\n\n![节点图](asset://img_1)\n\n[实验附件](asset://file_1)",
+            uploaded_assets=uploaded_assets,
+        )
+    )
+
+    image_block = raw["blocks"][2]
+    attachment_block = raw["blocks"][5]
+    assert image_block["type"] == "atomic"
+    assert image_block["text"] == ""
+    assert image_block["data"] == {
+        "type": "IMAGE",
+        "src": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+        "resizeData": {"width": 15, "height": 0},
+    }
+    assert attachment_block["type"] == "atomic"
+    assert attachment_block["text"] == " "
+    assert attachment_block["data"] == {
+        "type": "DISK",
+        "data": {"name": "实验附件.zip", "quote_id": "quote-2", "uploading": False},
+    }
+
+
+def test_markdown_to_rich_text_raw_rejects_missing_asset():
+    with pytest.raises(ValueError, match="img_1"):
+        rich_text.markdown_to_rich_text_raw("![节点图](asset://img_1)", uploaded_assets={})
+
+
+def test_normalize_rich_text_input_uploads_referenced_markdown_assets(monkeypatch, tmp_path):
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"png")
+    captured = {}
+
+    def fake_upload_assets(assets, referenced_ids):
+        captured["assets"] = assets
+        captured["referenced_ids"] = referenced_ids
+        return {
+            "img_1": {
+                "id": "img_1",
+                "type": "image",
+                "name": "diagram.png",
+                "quote_id": "quote-1",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+            }
+        }
+
+    monkeypatch.setattr(upload, "upload_rich_text_assets", fake_upload_assets)
+
+    raw = json.loads(
+        rich_text.normalize_rich_text_input(
+            markdown="![图](asset://img_1)",
+            assets=[
+                {
+                    "id": "img_1",
+                    "type": "image",
+                    "name": "diagram.png",
+                    "file_path": str(source),
+                }
+            ],
+        )
+    )
+
+    assert captured["referenced_ids"] == {"img_1"}
+    assert captured["assets"][0]["id"] == "img_1"
+    assert raw["blocks"][0]["data"]["type"] == "IMAGE"
+
+
+def test_render_rich_text_output_can_return_markdown_document():
+    raw = {
+        "blocks": [
+            {
+                "key": "a",
+                "text": "标题",
+                "type": "header-one",
+                "depth": 0,
+                "inlineStyleRanges": [],
+                "entityRanges": [],
+                "data": {},
+            },
+            {
+                "key": "b",
+                "text": "",
+                "type": "atomic",
+                "depth": 0,
+                "inlineStyleRanges": [],
+                "entityRanges": [],
+                "data": {
+                    "type": "IMAGE",
+                    "src": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+                },
+            },
+            {
+                "key": "c",
+                "text": " ",
+                "type": "atomic",
+                "depth": 0,
+                "inlineStyleRanges": [],
+                "entityRanges": [],
+                "data": {
+                    "type": "DISK",
+                    "data": {"name": "实验附件.zip", "quote_id": "quote-2", "uploading": False},
+                },
+            },
+        ],
+        "entityMap": {},
+    }
+
+    document = rich_text.render_rich_text_output(raw, "markdown")
+
+    assert document == {
+        "markdown": "# 标题\n\n![image_1](asset://img_1)\n\n[实验附件.zip](asset://file_1)",
+        "assets": [
+            {
+                "id": "img_1",
+                "type": "image",
+                "name": "image_1",
+                "quote_id": "quote-1",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+            },
+            {
+                "id": "file_1",
+                "type": "attachment",
+                "name": "实验附件.zip",
+                "quote_id": "quote-2",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-2",
+            },
+        ],
+    }
 
 
 def test_response_success_preserves_naive_iso_time_without_blind_offset():

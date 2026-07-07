@@ -57,7 +57,7 @@ CHECK_COMMENT_DESC = "批改评语（可为空）"
 # ── 查询粒度 / 模式 ───────────────────────────────────────────────────────────
 NEED_DETAIL_DESC = "是否在返回中包含完整题目内容（选项、答案等），仅需确认成功时设为 false"
 RETURN_PARSE_DESC = "true 返回纯文本（plain），false 返回原始富文本结构（raw）"
-PARSE_MODE_DESC = "富文本解析模式：plain=纯文本，raw=原始结构"
+PARSE_MODE_DESC = "富文本解析模式：plain=纯文本，raw=原始结构，markdown=标准 Markdown + assets"
 PAPER_DETAIL_LEVEL_DESC = "试卷粒度：summary=仅元信息，full=含全部题目"
 RESOURCE_DETAIL_LEVEL_DESC = "资源粒度：summary=名称/类型，full=全字段，raw=原始 API 数据"
 RESOURCE_VIEW_MODE_DESC = "资源视图：tree=树形结构，flat=平铺列表"
@@ -71,10 +71,19 @@ VISIBILITY_TYPE_DESC = "资源可见性（1=隐藏 2=可见）"
 QUESTION_TITLE_DESC = "题干"
 FILL_BLANK_TITLE_DESC = "题干（必须包含 ____ 作为填空占位符，有几个空就写几个 ____）"
 
-QUESTION_RICH_TEXT_DESC = "题干纯文本（与 title_raw 二选一）。只在一两行的简单题目用；结构化题干（OJ、分小节）走 title_raw。"
+QUESTION_RICH_TEXT_DESC = "题干纯文本（与 title_md/title_raw 三选一）。只在一两行的简单题目用。"
+QUESTION_MARKDOWN_RICH_TEXT_DESC = (
+    "题干 Markdown（与 title/title_raw 三选一）。工具会自动转为小雅 Draft.js 富文本；"
+    "适合 AI 输出的分节题干、列表、代码块、样例输入输出；图片/附件用 asset://id 占位并配合 title_assets。"
+)
+QUESTION_MARKDOWN_ASSETS_DESC = (
+    "题干 Markdown 引用的资源列表，仅与 title_md 一起使用。"
+    '格式：[{"id":"img_1","type":"image","name":"图.png","file_path":"/abs/图.png"}]；'
+    "图片占位：![说明](asset://img_1)，附件占位：[附件名](asset://file_1)。"
+)
 
 QUESTION_RAW_RICH_TEXT_DESC = (
-    "题干富文本（Draft.js 格式），与 title 二选一，优先本字段。\n"
+    "题干富文本（Draft.js 格式），与 title/title_md 三选一，优先本字段。\n"
     '格式：{"blocks": [...], "entityMap": {}}，每行一个 block，空行 = text="" 的 unstyled block。\n'
     "block.type 常用：unstyled / header-one~six / code-block / ordered-list-item / unordered-list-item / blockquote。\n"
     "inlineStyleRanges.style 常用：BOLD / ITALIC / UNDERLINE / CODE / lineThrough / color-red / backgroundColor-#ffff02 / fontSize-20。\n"
@@ -83,11 +92,25 @@ QUESTION_RAW_RICH_TEXT_DESC = (
     "完整支持矩阵见 xiaoya-teacher-skill/references/title_rich_text.md。"
 )
 
-OPTION_TEXT_DESC = "选项纯文本，与 text_raw 二选一"
-OPTION_RAW_TEXT_DESC = "选项富文本，与 text 二选一"
+OPTION_TEXT_DESC = "选项纯文本，与 text_md/text_raw 三选一"
+OPTION_MARKDOWN_TEXT_DESC = (
+    "选项 Markdown，与 text/text_raw 三选一，工具会自动转为小雅 Draft.js 富文本；"
+    "图片/附件用 asset://id 占位并配合 text_assets。"
+)
+OPTION_MARKDOWN_ASSETS_DESC = (
+    "选项 Markdown 引用的资源列表，仅与 text_md 一起使用，格式同 title_assets"
+)
+OPTION_RAW_TEXT_DESC = "选项富文本，与 text/text_md 三选一"
 OPTION_ANSWER_DESC = "是否为正确答案"
-REFERENCE_RICH_TEXT_DESC = "参考答案纯文本，与 answer_raw 二选一"
-REFERENCE_RAW_RICH_TEXT_DESC = "参考答案富文本，与 answer 二选一"
+REFERENCE_RICH_TEXT_DESC = "参考答案纯文本，与 answer_md/answer_raw 三选一"
+REFERENCE_MARKDOWN_RICH_TEXT_DESC = (
+    "参考答案 Markdown，与 answer/answer_raw 三选一，工具会自动转为小雅 Draft.js 富文本；"
+    "图片/附件用 asset://id 占位并配合 answer_assets。"
+)
+REFERENCE_MARKDOWN_ASSETS_DESC = (
+    "参考答案 Markdown 引用的资源列表，仅与 answer_md 一起使用，格式同 title_assets"
+)
+REFERENCE_RAW_RICH_TEXT_DESC = "参考答案富文本，与 answer/answer_md 三选一"
 ANSWER_TEXT_DESC = "答案文本"
 TRUE_FALSE_ANSWER_DESC = "正确答案（true=正确，false=错误）"
 

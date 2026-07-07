@@ -9,7 +9,7 @@ from pydantic import Field
 
 from ... import field_descriptions as desc
 from ...config import MAIN_URL, MCP
-from ...tools.questions.normalize import parse_answer_items
+from ...tools.questions.normalize import format_rich_text_field, parse_answer_items
 from ...tools.resources.query import _load_course_resource_map
 from ...types.enums import QuestionType
 from ...types.resource_models import ResourceType
@@ -169,7 +169,6 @@ def _build_preview_question(
     user_answer = answer.get("answer_items", []) if is_choice else answer.get("answer", "")
     question_data = {
         "id": question.get("id"),
-        "title": render_rich_text_output(question.get("title", ""), parse_mode),
         "type": QuestionType.get(question_type),
         "score": question.get("score"),
         "user_score": answer.get("score", 0),
@@ -177,15 +176,15 @@ def _build_preview_question(
         "answer_id": mark_answer.get("answer_id") if mark_answer else None,
         "check_score": mark_answer.get("check_score") if mark_answer else None,
     }
+    question_data.update(format_rich_text_field("title", question.get("title", ""), parse_mode))
     if detail_level == "full":
-        question_data["description"] = render_rich_text_output(
-            question.get("description", ""), parse_mode
+        question_data.update(
+            format_rich_text_field("description", question.get("description", ""), parse_mode)
         )
-        question_data["user"] = {
-            "answer": user_answer
-            if is_choice
-            else render_rich_text_output(user_answer, parse_mode),
-        }
+        if is_choice or question_type == QuestionType.ATTACHMENT.value:
+            question_data["user"] = {"answer": user_answer}
+        else:
+            question_data["user"] = format_rich_text_field("answer", user_answer, parse_mode)
         if question.get("answer_items"):
             question_data["options"] = parse_answer_items(
                 question["answer_items"], question_type, parse_mode
@@ -320,7 +319,7 @@ def query_preview_student_paper(
     ] = "summary",
     parse_mode: Annotated[
         str,
-        Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$"),
+        Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw|markdown)$"),
     ] = "plain",
 ) -> dict:
     """[批改第2步] 查询单个学生的完整答题内容，返回 mark_paper_record_id 和每道题的 answer_id（打分必需）"""

@@ -4,7 +4,9 @@ import uuid
 
 import pytest
 from dotenv import find_dotenv, load_dotenv
+from pydantic import ValidationError
 
+from xiaoya_teacher_mcp_server.config import DOWNLOAD_URL
 from xiaoya_teacher_mcp_server.tools.group import query as group_query
 from xiaoya_teacher_mcp_server.tools.questions import create, delete, query, update
 from xiaoya_teacher_mcp_server.tools.questions.normalize import parse_question
@@ -38,6 +40,7 @@ from xiaoya_teacher_mcp_server.types import (
     TrueFalseQuestion,
     TrueFalseQuestionData,
 )
+from xiaoya_teacher_mcp_server.utils import upload
 
 load_dotenv(find_dotenv())
 
@@ -351,6 +354,276 @@ def test_update_question_options_accepts_string_id_and_text(monkeypatch):
     assert json.loads(captured["payload"]["value"])["blocks"][0]["text"] == "更新后的选项"
 
 
+def test_question_models_accept_markdown_rich_text_fields():
+    question = ChoiceQuestion(
+        title_md="## 小节",
+        title_assets=[
+            {
+                "id": "img_1",
+                "type": "image",
+                "name": "图.png",
+                "file_path": "/tmp/not-uploaded-in-validation.png",
+            }
+        ],
+        description="desc",
+        options=[
+            QuestionOption(text_md="**A**", answer=True),
+            QuestionOption(text="B", answer=False),
+            QuestionOption(text="C", answer=False),
+            QuestionOption(text="D", answer=False),
+        ],
+        score=5,
+    )
+
+    assert question.title_md == "## 小节"
+    assert question.title_assets[0]["id"] == "img_1"
+    assert question.options[0].text_md == "**A**"
+
+
+def test_question_models_reject_multiple_rich_text_representations():
+    with pytest.raises(ValidationError, match="title、title_md、title_raw 只能提供一个"):
+        ChoiceQuestion(
+            title="plain",
+            title_md="**markdown**",
+            description="desc",
+            options=[
+                QuestionOption(text="A", answer=True),
+                QuestionOption(text="B", answer=False),
+                QuestionOption(text="C", answer=False),
+                QuestionOption(text="D", answer=False),
+            ],
+            score=5,
+        )
+
+
+def test_update_question_accepts_title_markdown(monkeypatch):
+    captured = {}
+
+    def fake_post_update_question(**payload):
+        captured["payload"] = payload
+        return {
+            "id": "question-1",
+            "title": payload["title"],
+            "description": "desc",
+            "type": 1,
+            "score": 5,
+            "required": 2,
+            "answer_items_sort": "",
+            "answer_items": [],
+        }
+
+    monkeypatch.setattr(update, "_post_update_question", fake_post_update_question)
+
+    result = update.update_question(question_id="question-1", title_md="## 小节")
+
+    assert result["success"]
+    raw = json.loads(captured["payload"]["title"])
+    assert raw["blocks"][0]["type"] == "header-two"
+    assert raw["blocks"][0]["text"] == "小节"
+
+
+def test_update_question_accepts_title_markdown_assets(monkeypatch, tmp_path):
+    source = tmp_path / "diagram.png"
+    source.write_bytes(b"png")
+    captured = {}
+
+    def fake_upload_assets(assets, referenced_ids):
+        captured["assets"] = assets
+        captured["referenced_ids"] = referenced_ids
+        return {
+            "img_1": {
+                "id": "img_1",
+                "type": "image",
+                "name": "diagram.png",
+                "quote_id": "quote-1",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+            }
+        }
+
+    def fake_post_update_question(**payload):
+        captured["payload"] = payload
+        return {
+            "id": "question-1",
+            "title": payload["title"],
+            "description": "desc",
+            "type": 1,
+            "score": 5,
+            "required": 2,
+            "answer_items_sort": "",
+            "answer_items": [],
+        }
+
+    monkeypatch.setattr(upload, "upload_rich_text_assets", fake_upload_assets)
+    monkeypatch.setattr(update, "_post_update_question", fake_post_update_question)
+
+    result = update.update_question(
+        question_id="question-1",
+        title_md="![节点图](asset://img_1)",
+        title_assets=[
+            {
+                "id": "img_1",
+                "type": "image",
+                "name": "diagram.png",
+                "file_path": str(source),
+            }
+        ],
+        parse_mode="raw",
+    )
+
+    assert result["success"]
+    assert captured["referenced_ids"] == {"img_1"}
+    raw = json.loads(captured["payload"]["title"])
+    assert raw["blocks"][0]["type"] == "atomic"
+    assert raw["blocks"][0]["data"]["type"] == "IMAGE"
+    assert raw["blocks"][0]["data"]["src"] == f"{DOWNLOAD_URL}/cloud/file_access/quote-1"
+
+
+def test_update_question_options_accepts_markdown(monkeypatch):
+    captured = {}
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        captured["payload"] = payload
+        return {
+            "success": True,
+            "data": [
+                {
+                    "id": "answer-1",
+                    "value": payload["value"],
+                    "answer_checked": 2,
+                }
+            ],
+        }
+
+    monkeypatch.setattr(update, "post_json", fake_post)
+
+    result = update.update_question_options(
+        question_id="question-1",
+        answer_item_id="answer-1",
+        option_text_md="**选项A**",
+        is_answer=True,
+    )
+
+    assert result["success"]
+    raw = json.loads(captured["payload"]["value"])
+    assert raw["blocks"][0]["text"] == "选项A"
+    assert raw["blocks"][0]["inlineStyleRanges"] == [{"offset": 0, "length": 3, "style": "BOLD"}]
+
+
+def test_update_question_options_accepts_markdown_assets(monkeypatch, tmp_path):
+    source = tmp_path / "lab.zip"
+    source.write_bytes(b"zip")
+    captured = {}
+
+    def fake_upload_assets(assets, referenced_ids):
+        captured["referenced_ids"] = referenced_ids
+        return {
+            "file_1": {
+                "id": "file_1",
+                "type": "attachment",
+                "name": "lab.zip",
+                "quote_id": "quote-2",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-2",
+            }
+        }
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        captured["payload"] = payload
+        return {
+            "success": True,
+            "data": [{"id": "answer-1", "value": payload["value"], "answer_checked": 1}],
+        }
+
+    monkeypatch.setattr(upload, "upload_rich_text_assets", fake_upload_assets)
+    monkeypatch.setattr(update, "post_json", fake_post)
+
+    result = update.update_question_options(
+        question_id="question-1",
+        answer_item_id="answer-1",
+        option_text_md="[实验附件](asset://file_1)",
+        option_text_assets=[
+            {
+                "id": "file_1",
+                "type": "attachment",
+                "name": "lab.zip",
+                "file_path": str(source),
+            }
+        ],
+    )
+
+    assert result["success"]
+    assert captured["referenced_ids"] == {"file_1"}
+    raw = json.loads(captured["payload"]["value"])
+    assert raw["blocks"][0]["type"] == "atomic"
+    assert raw["blocks"][0]["data"]["type"] == "DISK"
+    assert raw["blocks"][0]["data"]["data"]["quote_id"] == "quote-2"
+
+
+def test_update_short_answer_answer_accepts_markdown(monkeypatch):
+    captured = {}
+
+    def fake_post_update_answer_item(**payload):
+        captured["payload"] = payload
+        return [{"id": "answer-1", "answer": payload["answer"]}]
+
+    monkeypatch.setattr(update, "_post_update_answer_item", fake_post_update_answer_item)
+
+    result = update.update_short_answer_answer(
+        question_id="question-1",
+        answer_item_id="answer-1",
+        answer_md="`参考答案`",
+    )
+
+    assert result["success"]
+    raw = json.loads(captured["payload"]["answer"])
+    assert raw["blocks"][0]["text"] == "参考答案"
+    assert raw["blocks"][0]["inlineStyleRanges"] == [{"offset": 0, "length": 4, "style": "CODE"}]
+
+
+def test_update_short_answer_answer_accepts_markdown_assets(monkeypatch, tmp_path):
+    source = tmp_path / "answer.png"
+    source.write_bytes(b"png")
+    captured = {}
+
+    def fake_upload_assets(assets, referenced_ids):
+        captured["referenced_ids"] = referenced_ids
+        return {
+            "img_1": {
+                "id": "img_1",
+                "type": "image",
+                "name": "answer.png",
+                "quote_id": "quote-3",
+                "url": f"{DOWNLOAD_URL}/cloud/file_access/quote-3",
+            }
+        }
+
+    def fake_post_update_answer_item(**payload):
+        captured["payload"] = payload
+        return [{"id": "answer-1", "answer": payload["answer"]}]
+
+    monkeypatch.setattr(upload, "upload_rich_text_assets", fake_upload_assets)
+    monkeypatch.setattr(update, "_post_update_answer_item", fake_post_update_answer_item)
+
+    result = update.update_short_answer_answer(
+        question_id="question-1",
+        answer_item_id="answer-1",
+        answer_md="![答案图](asset://img_1)",
+        answer_assets=[
+            {
+                "id": "img_1",
+                "type": "image",
+                "name": "answer.png",
+                "file_path": str(source),
+            }
+        ],
+        parse_mode="raw",
+    )
+
+    assert result["success"]
+    assert captured["referenced_ids"] == {"img_1"}
+    raw = json.loads(captured["payload"]["answer"])
+    assert raw["blocks"][0]["data"]["type"] == "IMAGE"
+
+
 def test_update_question_validates_code_cases_before_remote_update(monkeypatch):
     called = False
 
@@ -460,6 +733,57 @@ def test_parse_question_fill_blank_fields_are_mapped_correctly():
 
     assert result["automatic_type"] == "精确匹配+有序"
     assert result["automatic_stat"] == "开启"
+
+
+def test_parse_question_markdown_mode_returns_markdown_fields():
+    result = parse_question(
+        {
+            "id": "question-1",
+            "title": json.dumps(
+                {
+                    "blocks": [
+                        {"text": "标题", "type": "header-one", "inlineStyleRanges": [], "data": {}},
+                        {
+                            "text": "",
+                            "type": "atomic",
+                            "inlineStyleRanges": [],
+                            "data": {
+                                "type": "IMAGE",
+                                "src": f"{DOWNLOAD_URL}/cloud/file_access/quote-1",
+                            },
+                        },
+                    ],
+                    "entityMap": {},
+                },
+                ensure_ascii=False,
+            ),
+            "description": "desc",
+            "type": 1,
+            "score": 5,
+            "required": 2,
+            "answer_items_sort": "",
+            "answer_items": [
+                {
+                    "id": "a1",
+                    "value": json.dumps(
+                        {
+                            "blocks": [{"text": "选项A", "type": "unstyled", "data": {}}],
+                            "entityMap": {},
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "answer_checked": 2,
+                }
+            ],
+        },
+        parse_mode="markdown",
+    )
+
+    assert "title" not in result
+    assert result["title_md"] == "# 标题\n\n![image_1](asset://img_1)"
+    assert result["title_assets"][0]["quote_id"] == "quote-1"
+    assert result["options"][0]["value_md"] == "选项A"
+    assert result["options"][0]["value_assets"] == []
 
 
 def test_office_create_questions_detects_answer_mismatch(monkeypatch):

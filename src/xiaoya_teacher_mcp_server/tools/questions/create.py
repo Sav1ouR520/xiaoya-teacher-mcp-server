@@ -32,7 +32,11 @@ from ...utils.client import (
     post_json,
 )
 from ...utils.response import ResponseUtil
-from ...utils.rich_text import render_rich_text_output
+from ...utils.rich_text import (
+    markdown_without_asset_references,
+    normalize_rich_text_input,
+    render_rich_text_output,
+)
 from .delete import delete_questions
 from .update import (
     update_fill_blank_answer,
@@ -49,8 +53,16 @@ def resolve_parse_mode(need_parse: bool) -> str:
     return "plain" if need_parse else "raw"
 
 
-def extract_plain_title(title: str | None, title_raw: dict[str, Any] | None) -> str:
-    return render_rich_text_output(title_raw if title_raw is not None else title, "plain") or ""
+def extract_plain_title(
+    title: str | None, title_md: str | None, title_raw: dict[str, Any] | None
+) -> str:
+    if title_raw is not None:
+        return render_rich_text_output(title_raw, "plain") or ""
+    normalized = normalize_rich_text_input(
+        text=title,
+        markdown=markdown_without_asset_references(title_md) if title_md is not None else None,
+    )
+    return render_rich_text_output(normalized, "plain") or ""
 
 
 def create_question_data(
@@ -92,6 +104,8 @@ def update_question_base(
     *,
     question_id: str,
     title: str | None,
+    title_md: str | None,
+    title_assets: list[dict[str, Any]] | None,
     title_raw: dict[str, Any] | None,
     description: str,
     required: bool,
@@ -101,6 +115,8 @@ def update_question_base(
     result = update_question(
         question_id=question_id,
         title=title,
+        title_md=title_md,
+        title_assets=title_assets,
         title_raw=title_raw,
         description=description,
         required=required,
@@ -113,9 +129,9 @@ def update_question_base(
 
 
 def validate_fill_blank_question(
-    title: str | None, title_raw: dict[str, Any] | None, answers_count: int
+    title: str | None, title_md: str | None, title_raw: dict[str, Any] | None, answers_count: int
 ) -> str:
-    plain_title = extract_plain_title(title, title_raw)
+    plain_title = extract_plain_title(title, title_md, title_raw)
     if "____" not in plain_title:
         raise ValueError("填空题标题必须包含空白标记'____'")
     blank_count = plain_title.count("____")
@@ -171,7 +187,9 @@ def create_fill_blank_question(
     question_id = None
     try:
         parse_mode = resolve_parse_mode(need_parse)
-        validate_fill_blank_question(question.title, question.title_raw, len(question.options))
+        validate_fill_blank_question(
+            question.title, question.title_md, question.title_raw, len(question.options)
+        )
 
         question_data = create_question_data(
             paper_id, QuestionType.FILL_BLANK, question.score, question.insert_question_id
@@ -180,6 +198,8 @@ def create_fill_blank_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -234,6 +254,8 @@ def create_true_false_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -272,6 +294,8 @@ def create_short_answer_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -281,6 +305,8 @@ def create_short_answer_question(
             question_id=question_id,
             answer_item_id=answer_item_id,
             answer=question.answer,
+            answer_md=question.answer_md,
+            answer_assets=question.answer_assets,
             answer_raw=question.answer_raw,
             parse_mode=parse_mode,
         )
@@ -312,6 +338,8 @@ def create_attachment_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -355,6 +383,8 @@ def create_code_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -410,6 +440,7 @@ def batch_create_questions(
     for index, question in enumerate(questions, 1):
         question_title = extract_plain_title(
             getattr(question, "title", None),
+            getattr(question, "title_md", None),
             getattr(question, "title_raw", None),
         )
         question_type = QuestionType.get(question.type)
@@ -507,7 +538,7 @@ def office_create_questions(
             if question.type == QuestionType.FILL_BLANK:
                 try:
                     validate_fill_blank_question(
-                        question.title, None, len(question.standard_answers)
+                        question.title, None, None, len(question.standard_answers)
                     )
                 except ValueError as e:
                     return ResponseUtil.error(f"第{index}题格式错误", e)
@@ -623,6 +654,8 @@ def _create_choice_question(
         question_data = update_question_base(
             question_id=question_id,
             title=question.title,
+            title_md=question.title_md,
+            title_assets=question.title_assets,
             title_raw=question.title_raw,
             description=question.description,
             required=question.required,
@@ -639,6 +672,8 @@ def _create_choice_question(
                 question_id=question_id,
                 answer_item_id=item["answer_item_id"],
                 option_text=option.text,
+                option_text_md=option.text_md,
+                option_text_assets=option.text_assets,
                 option_text_raw=option.text_raw,
                 is_answer=option.answer,
                 parse_mode=parse_mode,

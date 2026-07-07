@@ -9,7 +9,7 @@ from pydantic import Field
 
 from ... import field_descriptions as desc
 from ...config import MAIN_URL, MCP
-from ...tools.questions.normalize import parse_question
+from ...tools.questions.normalize import format_rich_text_field, parse_question
 from ...tools.questions.query import _fetch_paper_edit_buffer
 from ...types.enums import (
     AnswerChecked,
@@ -26,7 +26,7 @@ from ...utils.client import (
     post_json,
 )
 from ...utils.response import ResponseUtil
-from ...utils.rich_text import normalize_rich_text_input, render_rich_text_output
+from ...utils.rich_text import normalize_rich_text_input
 
 KNOWN_UPDATE_ERRORS = (APIRequestError, ValueError)
 
@@ -42,26 +42,26 @@ def _post_update_question(**payload) -> dict[str, Any]:
 
 
 def _format_choice_items(items: list[dict[str, Any]], parse_mode: str) -> list[dict[str, Any]]:
-    return [
-        {
-            "answer_item_id": item["id"],
-            "value": render_rich_text_output(item["value"], parse_mode),
-            "answer": AnswerChecked.get(item["answer_checked"]),
-        }
-        for item in items
-    ]
+    formatted = []
+    for item in items:
+        parsed = {"answer_item_id": item["id"], "answer": AnswerChecked.get(item["answer_checked"])}
+        parsed.update(format_rich_text_field("value", item["value"], parse_mode))
+        formatted.append(parsed)
+    return formatted
 
 
 def _format_answer_items(
     items: list[dict[str, Any]], field: str, *, parse_mode: str | None = None
 ) -> list[dict[str, Any]]:
-    return [
-        {
-            "answer_item_id": item["id"],
-            field: render_rich_text_output(item[field], parse_mode) if parse_mode else item[field],
-        }
-        for item in items
-    ]
+    formatted = []
+    for item in items:
+        parsed = {"answer_item_id": item["id"]}
+        if parse_mode:
+            parsed.update(format_rich_text_field(field, item[field], parse_mode))
+        else:
+            parsed[field] = item[field]
+        formatted.append(parsed)
+    return formatted
 
 
 def _format_true_false_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -168,6 +168,12 @@ def _update_code_cases(
 def update_question(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
     title: Annotated[str | None, Field(description=desc.QUESTION_RICH_TEXT_DESC)] = None,
+    title_md: Annotated[
+        str | None, Field(description=desc.QUESTION_MARKDOWN_RICH_TEXT_DESC)
+    ] = None,
+    title_assets: Annotated[
+        list[dict[str, Any]] | None, Field(description=desc.QUESTION_MARKDOWN_ASSETS_DESC)
+    ] = None,
     title_raw: Annotated[
         dict[str, Any] | None, Field(description=desc.QUESTION_RAW_RICH_TEXT_DESC)
     ] = None,
@@ -181,13 +187,16 @@ def update_question(
         ProgramSetting | None, Field(description=desc.PROGRAM_SETTING_OPTIONAL_DESC)
     ] = None,
     parse_mode: Annotated[
-        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+        str,
+        Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw|markdown)$"),
     ] = "plain",
 ) -> dict:
     """更新任意题目的通用配置"""
     try:
         payload: dict[str, Any] = {"question_id": str(question_id)}
-        normalized_title = normalize_rich_text_input(text=title, raw=title_raw)
+        normalized_title = normalize_rich_text_input(
+            text=title, markdown=title_md, raw=title_raw, assets=title_assets
+        )
         if normalized_title is not None:
             payload["title"] = normalized_title
         if description is not None:
@@ -236,12 +245,17 @@ def update_question_options(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
     answer_item_id: Annotated[str, Field(description=desc.OPTION_ID_DESC)],
     option_text: Annotated[str | None, Field(description=desc.OPTION_TEXT_DESC)] = None,
+    option_text_md: Annotated[str | None, Field(description=desc.OPTION_MARKDOWN_TEXT_DESC)] = None,
+    option_text_assets: Annotated[
+        list[dict[str, Any]] | None, Field(description=desc.OPTION_MARKDOWN_ASSETS_DESC)
+    ] = None,
     option_text_raw: Annotated[
         dict[str, Any] | None, Field(description=desc.OPTION_RAW_TEXT_DESC)
     ] = None,
     is_answer: Annotated[bool | None, Field(description=desc.OPTION_ANSWER_DESC)] = False,
     parse_mode: Annotated[
-        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+        str,
+        Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw|markdown)$"),
     ] = "plain",
 ) -> dict:
     """[仅限单选/多选题]更新单选或多选题的选项内容"""
@@ -250,7 +264,12 @@ def update_question_options(
             "question_id": str(question_id),
             "answer_item_id": str(answer_item_id),
         }
-        normalized_value = normalize_rich_text_input(text=option_text, raw=option_text_raw)
+        normalized_value = normalize_rich_text_input(
+            text=option_text,
+            markdown=option_text_md,
+            raw=option_text_raw,
+            assets=option_text_assets,
+        )
         if normalized_value is not None:
             payload["value"] = normalized_value
         if is_answer is not None:
@@ -312,16 +331,25 @@ def update_short_answer_answer(
     question_id: Annotated[str, Field(description=desc.QUESTION_ID_DESC)],
     answer_item_id: Annotated[str, Field(description=desc.ANSWER_ITEM_ID_DESC)],
     answer: Annotated[str | None, Field(description=desc.REFERENCE_RICH_TEXT_DESC)] = None,
+    answer_md: Annotated[
+        str | None, Field(description=desc.REFERENCE_MARKDOWN_RICH_TEXT_DESC)
+    ] = None,
+    answer_assets: Annotated[
+        list[dict[str, Any]] | None, Field(description=desc.REFERENCE_MARKDOWN_ASSETS_DESC)
+    ] = None,
     answer_raw: Annotated[
         dict[str, Any] | None, Field(description=desc.REFERENCE_RAW_RICH_TEXT_DESC)
     ] = None,
     parse_mode: Annotated[
-        str, Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw)$")
+        str,
+        Field(description=desc.PARSE_MODE_DESC, default="plain", pattern="^(plain|raw|markdown)$"),
     ] = "plain",
 ) -> dict:
     """[仅限简答题]更新简答题参考答案"""
     try:
-        normalized_answer = normalize_rich_text_input(text=answer, raw=answer_raw)
+        normalized_answer = normalize_rich_text_input(
+            text=answer, markdown=answer_md, raw=answer_raw, assets=answer_assets
+        )
         return ResponseUtil.success(
             _format_answer_items(
                 _post_update_answer_item(

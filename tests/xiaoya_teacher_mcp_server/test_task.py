@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from dotenv import find_dotenv, load_dotenv
 
+from xiaoya_teacher_mcp_server.config import DOWNLOAD_URL
 from xiaoya_teacher_mcp_server.tools.group import query as group_query
 from xiaoya_teacher_mcp_server.tools.task import grade as task_grade
 from xiaoya_teacher_mcp_server.tools.task import query as task_query
@@ -246,6 +247,56 @@ def test_query_preview_student_paper_defaults_to_summary(monkeypatch):
     ]
 
 
+def test_query_preview_student_paper_markdown_mode_returns_markdown_fields(monkeypatch):
+    monkeypatch.setattr(
+        task_query,
+        "get_json",
+        lambda *args, **kwargs: {
+            "success": True,
+            "data": {
+                "answer_record": {
+                    "id": "record-1",
+                    "answers": [{"question_id": "question-1", "score": 5, "answer": "学生答案"}],
+                },
+                "mark_records": [{"id": "mpr-1", "mark_answers": []}],
+                "questions": [
+                    {
+                        "id": "question-1",
+                        "title": (
+                            '{"blocks":[{"text":"题目1","type":"unstyled","data":{}},'
+                            '{"text":"","type":"atomic","data":{"type":"IMAGE","src":"'
+                            f"{DOWNLOAD_URL}/cloud/file_access/quote-1"
+                            '"}}],"entityMap":{}}'
+                        ),
+                        "description": '{"blocks":[{"text":"说明","type":"unstyled","data":{}}],"entityMap":{}}',
+                        "type": 6,
+                        "score": 5,
+                        "answer_items": [],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = task_query.query_preview_student_paper(
+        "group-1",
+        "paper-1",
+        "mark-1",
+        "publish-1",
+        "record-1",
+        detail_level="full",
+        parse_mode="markdown",
+    )
+
+    question = result["data"]["questions"][0]
+    assert result["success"]
+    assert "title" not in question
+    assert question["title_md"] == "题目1\n\n![image_1](asset://img_1)"
+    assert question["title_assets"][0]["quote_id"] == "quote-1"
+    assert question["description_md"] == "说明"
+    assert question["user"]["answer_md"] == "学生答案"
+
+
 def _stub_response(content: bytes, content_type: str = "image/png") -> SimpleNamespace:
     return SimpleNamespace(content=content, headers={"content-type": content_type})
 
@@ -298,3 +349,110 @@ def test_get_answer_file_save_path_directory_auto_names(monkeypatch, tmp_path):
     expected = tmp_path / "quote-3.png"
     assert result["data"]["file_path"] == str(expected)
     assert expected.read_bytes() == payload
+
+
+def test_withdraw_student_mark_uses_normal_reset_by_default(monkeypatch):
+    captured = {}
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        captured["url"] = url
+        captured["payload"] = payload
+        return {"success": True, "data": {"ok": True}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.withdraw_student_mark(
+        group_id="group-1",
+        answer_record_id="record-1",
+        mark_mode_id="mark-mode-1",
+        mark_paper_record_id="mark-paper-1",
+    )
+
+    assert result["success"]
+    assert captured["url"].endswith("/survey/course/normal/mark/reset")
+    assert captured["payload"] == {
+        "group_id": "group-1",
+        "answer_record_id": "record-1",
+        "mark_mode_id": "mark-mode-1",
+        "mark_paper_record_id": "mark-paper-1",
+    }
+
+
+def test_withdraw_student_mark_uses_review_reset_when_teacher_recheck(monkeypatch):
+    captured = {}
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        captured["url"] = url
+        captured["payload"] = payload
+        return {"success": True, "data": {"ok": True}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.withdraw_student_mark(
+        group_id="group-1",
+        answer_record_id="record-1",
+        mark_mode_id="mark-mode-1",
+        mark_paper_record_id="mark-paper-1",
+        is_teacher_recheck=True,
+    )
+
+    assert result["success"]
+    assert captured["url"].endswith("/survey/course/review/mark/reset")
+
+
+def test_revise_student_mark_reopens_grades_and_submits_in_order(monkeypatch):
+    calls = []
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        calls.append((url, payload))
+        return {"success": True, "data": {"step": len(calls)}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.revise_student_mark(
+        group_id="group-1",
+        publish_id="publish-1",
+        mark_paper_record_id="mark-paper-1",
+        record_id="record-1",
+        mark_mode_id="mark-mode-1",
+        question_id="question-1",
+        answer_id="answer-1",
+        score=88,
+        comment="重新评分",
+        allow_reopen=True,
+        submit_after=True,
+    )
+
+    assert result["success"]
+    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == [
+        "reset",
+        "checkStuAnswer",
+        "submitMark",
+    ]
+    assert calls[1][1]["check_score"] == 88
+    assert calls[1][1]["check_description"] == "重新评分"
+
+
+def test_revise_student_mark_does_not_reopen_by_default(monkeypatch):
+    calls = []
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        calls.append((url, payload))
+        return {"success": True, "data": {"step": len(calls)}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.revise_student_mark(
+        group_id="group-1",
+        publish_id="publish-1",
+        mark_paper_record_id="mark-paper-1",
+        record_id="record-1",
+        mark_mode_id="mark-mode-1",
+        question_id="question-1",
+        answer_id="answer-1",
+        score=90,
+        comment="只改未提交批阅",
+    )
+
+    assert result["success"]
+    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == ["checkStuAnswer"]

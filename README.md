@@ -1,6 +1,6 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.3.3-blue)
+![版本](https://img.shields.io/badge/版本-1.4.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
@@ -38,7 +38,7 @@
 - **任务查询** - 查询课程组已发布任务列表、任务详情
 - **成绩管理** - 学生答题情况统计、成绩分析
 - **答题分析** - 学生答题详情预览、题目解析
-- **AI 批阅** - 逐题打分、批注、提交批改，支持附件答案（图片/PDF/文件）查看
+- **AI 批阅** - 逐题打分、批注、提交批改，支持附件答案（图片/PDF/文件）查看；已提交批阅可确认后重开修改
 
 ## 🚀 快速开始
 
@@ -223,12 +223,16 @@ Authorization: Bearer your_bearer_token
 - 修改已有试卷时，优先从 `query_course_resources_summary` 或 `query_course_resources` 中查找带 `paper_id` 的作业资源，再用 `query_paper_summary` 查看题数、题型和总分。
 - `query_group_tasks` 面向已发布任务，主要提供 `paper_id` 和 `publish_id` 给批阅/答题统计流程使用，不负责筛选未发布试卷。
 - 当前没有单独的“自动生成试卷标题”工具。需要个性化标题时，建议让 AI 先给出候选标题，经老师确认后作为 `create_course_resource` 的资源名称。
+- 题干、选项和简答参考答案支持 Markdown 输入字段（如 `title_md`、`text_md`、`answer_md`），工具会自动转换为小雅富文本；需要精确 Draft.js 控制时再使用 `*_raw`。
+- Markdown 中的图片和附件使用 `asset://id` 占位，并通过相邻 assets 字段传本地文件。示例：`title_md="![节点图](asset://img_1)\n\n[实验附件](asset://file_1)"`，`title_assets=[{"id":"img_1","type":"image","name":"节点图.png","file_path":"/abs/node.png"},{"id":"file_1","type":"attachment","name":"实验附件.zip","file_path":"/abs/lab.zip"}]`。工具会按小雅网页端流程上传并写入富文本。
+- 读取试卷或答卷时可设置 `parse_mode="markdown"`，富文本会返回为标准 Markdown 字段和资源列表，例如 `title_md` + `title_assets`、`value_md` + `value_assets`、`answer_md` + `answer_assets`。
 
 #### 批阅/成绩
 
 - 先用 `query_group_tasks` 选择已发布任务，再调用 `query_test_result` 获取提交人数、未提交人数、平均分和学生答题记录。
 - 查看单个学生答卷使用 `query_preview_student_paper`；需要完整答案内容时设置 `detail_level=full`。
 - 主观题评分流程为 `grade_student_question` 逐题打分，最后用 `submit_student_mark` 提交整卷批阅。选择题、判断题、自动评分填空题一般沿用系统判分。
+- 已提交批阅如需修改，先用 `withdraw_student_mark` 重开，或在明确确认后用 `revise_student_mark(..., allow_reopen=true, submit_after=true)` 重开、改单题并重新提交。
 - 附件答案可用 `get_answer_file` 获取 base64 内容；图片/PDF/小文件更适合直接读取，视频或大文件建议谨慎调用，避免返回过大的内容。
 
 #### 编程题
@@ -271,7 +275,8 @@ xiaoya-teacher-mcp-server/
 │           ├── client.py          # 统一 HTTP 客户端与自动重登
 │           ├── logging.py         # 统一日志
 │           ├── response.py        # 统一响应处理
-│           └── rich_text.py       # 纯文本与 raw 富文本转换
+│           ├── rich_text.py       # 纯文本、Markdown、raw 富文本转换
+│           └── upload.py          # 小雅网页端同款富文本资源上传
 └── tests/                  # 回归测试
 ```
 
@@ -294,7 +299,7 @@ xiaoya-teacher-mcp-server/
 
 #### 📋 任务管理模块
 - **query.py** - 默认返回任务和答题摘要, 按需返回完整答卷明细
-- **grade.py** - 逐题打分与提交批改, 附件答案文件获取
+- **grade.py** - 逐题打分、提交批改、重开已提交批阅、附件答案文件获取
 
 ## 🔧 技术栈
 

@@ -16,38 +16,58 @@ from ...types.enums import (
 from ...utils.rich_text import render_rich_text_output
 
 
+def format_rich_text_field(field: str, value: Any, parse_mode: str) -> dict[str, Any]:
+    rendered = render_rich_text_output(value, parse_mode)
+    if parse_mode == "markdown":
+        return {
+            f"{field}_md": rendered["markdown"],
+            f"{field}_assets": rendered["assets"],
+        }
+    return {field: rendered}
+
+
+def _non_markdown_parse_mode(parse_mode: str) -> str:
+    return "plain" if parse_mode == "markdown" else parse_mode
+
+
+def _parse_rich_answer_item(item: dict[str, Any], field: str, parse_mode: str) -> dict[str, Any]:
+    parsed_item = {"answer_item_id": item["id"]}
+    parsed_item.update(format_rich_text_field(field, item[field], parse_mode))
+    return parsed_item
+
+
 def parse_answer_items(
     answer_items: list[dict[str, Any]],
     question_type: int,
     parse_mode: str = "plain",
 ) -> list[dict[str, Any]]:
     def _parse_choice(item):
-        return {
+        parsed_item = {
             "answer_item_id": item["id"],
-            "value": render_rich_text_output(item["value"], parse_mode),
             "answer": AnswerChecked.get(item["answer_checked"]),
         }
+        parsed_item.update(format_rich_text_field("value", item["value"], parse_mode))
+        return parsed_item
 
     parsers = {
         QuestionType.MULTIPLE_CHOICE.value: _parse_choice,
         QuestionType.SINGLE_CHOICE.value: _parse_choice,
         QuestionType.FILL_BLANK.value: lambda item: {
             "answer_item_id": item["id"],
-            "answer": render_rich_text_output(item["answer"], parse_mode),
+            "answer": render_rich_text_output(item["answer"], _non_markdown_parse_mode(parse_mode)),
         },
         QuestionType.TRUE_FALSE.value: lambda item: {
             "answer_item_id": item["id"],
             "answer": AnswerChecked.get(item["answer_checked"]),
             "value": item.get("value", ""),
         },
-        QuestionType.SHORT_ANSWER.value: lambda item: {
-            "answer_item_id": item["id"],
-            "answer": render_rich_text_output(item["answer"], parse_mode),
-        },
+        QuestionType.SHORT_ANSWER.value: lambda item: _parse_rich_answer_item(
+            item, "answer", parse_mode
+        ),
         QuestionType.ATTACHMENT.value: None,
         QuestionType.CODE.value: lambda item: {
             "answer_item_id": item["id"],
-            "answer": render_rich_text_output(item["answer"], parse_mode),
+            "answer": render_rich_text_output(item["answer"], _non_markdown_parse_mode(parse_mode)),
         },
     }
     parser = parsers.get(question_type)
@@ -60,13 +80,13 @@ def parse_question(
 ) -> dict[str, Any]:
     question_data = {
         "id": question["id"],
-        "title": render_rich_text_output(question["title"], parse_mode),
         "description": question["description"],
         "type": QuestionType.get(question["type"]),
         "score": question["score"],
         "required": RequiredType.get(question["required"]),
         "answer_items_sort": question["answer_items_sort"],
     }
+    question_data.update(format_rich_text_field("title", question["title"], parse_mode))
     question_data["options"] = (
         parse_answer_items(question["answer_items"], question["type"], parse_mode)
         if question.get("answer_items")
@@ -92,12 +112,12 @@ def summarize_question(
     answer_items = question.get("answer_items") or []
     summary = {
         "id": question["id"],
-        "title": render_rich_text_output(question["title"], parse_mode),
         "type": QuestionType.get(question["type"]),
         "score": question["score"],
         "required": RequiredType.get(question["required"]),
         "option_count": len(answer_items),
     }
+    summary.update(format_rich_text_field("title", question["title"], parse_mode))
     if question["type"] == QuestionType.FILL_BLANK.value:
         summary["blank_count"] = len(answer_items)
     if question["type"] == QuestionType.CODE.value:
