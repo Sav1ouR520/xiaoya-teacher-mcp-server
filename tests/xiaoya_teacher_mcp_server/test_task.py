@@ -297,6 +297,62 @@ def test_query_preview_student_paper_markdown_mode_returns_markdown_fields(monke
     assert question["user"]["answer_md"] == "学生答案"
 
 
+def test_query_preview_student_paper_full_includes_check_comment(monkeypatch):
+    monkeypatch.setattr(
+        task_query,
+        "get_json",
+        lambda *args, **kwargs: {
+            "success": True,
+            "data": {
+                "answer_record": {
+                    "id": "record-1",
+                    "answers": [{"question_id": "question-1", "score": 4, "answer": "学生答案"}],
+                },
+                "mark_records": [
+                    {
+                        "id": "mpr-1",
+                        "mark_answers": [
+                            {
+                                "question_id": "question-1",
+                                "answer_id": "ans-1",
+                                "check_score": 4,
+                                "check_description": "步骤基本完整",
+                                "check_status": 2,
+                            }
+                        ],
+                    }
+                ],
+                "questions": [
+                    {
+                        "id": "question-1",
+                        "title": '{"blocks":[{"text":"题目1"}],"entityMap":{}}',
+                        "description": '{"blocks":[{"text":"说明"}],"entityMap":{}}',
+                        "type": 6,
+                        "score": 5,
+                        "answer_items": [],
+                    }
+                ],
+            },
+        },
+    )
+
+    result = task_query.query_preview_student_paper(
+        "group-1",
+        "paper-1",
+        "mark-1",
+        "publish-1",
+        "record-1",
+        detail_level="full",
+    )
+
+    question = result["data"]["questions"][0]
+    assert result["success"]
+    assert question["check_score"] == 4
+    assert question["check_description"] == "步骤基本完整"
+    assert question["check_status"] == 2
+    assert question["grading_state"] == "graded"
+
+
 def _stub_response(content: bytes, content_type: str = "image/png") -> SimpleNamespace:
     return SimpleNamespace(content=content, headers={"content-type": content_type})
 
@@ -314,7 +370,7 @@ def test_get_answer_file_returns_base64_when_no_save_path(monkeypatch):
     assert result["success"]
     assert result["data"]["content"] == base64.b64encode(payload).decode()
     assert result["data"]["mimetype"] == "image/png"
-    assert result["data"]["size"] == len(payload)
+    assert "size" not in result["data"]
     assert "file_path" not in result["data"]
 
 
@@ -331,7 +387,9 @@ def test_get_answer_file_writes_to_save_path_file(monkeypatch, tmp_path):
 
     assert result["success"]
     assert result["data"]["file_path"] == str(target)
+    assert result["data"]["mimetype"] == "application/pdf"
     assert "content" not in result["data"]
+    assert "size" not in result["data"]
     assert Path(target).read_bytes() == payload
 
 
@@ -349,6 +407,167 @@ def test_get_answer_file_save_path_directory_auto_names(monkeypatch, tmp_path):
     expected = tmp_path / "quote-3.png"
     assert result["data"]["file_path"] == str(expected)
     assert expected.read_bytes() == payload
+
+
+def test_get_student_grading_bundle_downloads_attachments_once_and_reuses_cache(
+    monkeypatch, tmp_path
+):
+    def fake_preview(*args, **kwargs):
+        return {
+            "success": True,
+            "data": {
+                "record_id": "record-1",
+                "mark_paper_record_id": "mpr-1",
+                "question_count": 1,
+                "questions": [
+                    {
+                        "id": "question-auto",
+                        "type": "单选题",
+                        "score": 5,
+                        "answer_id": "answer-auto",
+                        "check_score": 5,
+                        "check_description": "",
+                        "has_answer": True,
+                        "title": "自动题",
+                        "user": {"answer": ["A"]},
+                    },
+                    {
+                        "id": "question-1",
+                        "type": "附件题",
+                        "score": 10,
+                        "title": "上传实验截图",
+                        "description": "按截图完整性评分",
+                        "answer_id": "answer-1",
+                        "check_score": None,
+                        "check_description": "",
+                        "has_answer": True,
+                        "user": {"answer": []},
+                        "attachments": [
+                            {
+                                "name": "截图.png",
+                                "quote_id": "quote-1",
+                                "mimetype": "image/png",
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+
+    calls = []
+
+    def fake_request(method, url, **kwargs):
+        calls.append((method, url))
+        return _stub_response(b"\x89PNG\r\nbundle", "image/png")
+
+    monkeypatch.setattr(task_grade, "query_preview_student_paper", fake_preview)
+    monkeypatch.setattr(task_grade, "request_response", fake_request)
+
+    first = task_grade.get_student_grading_bundle(
+        group_id="group-1",
+        paper_id="paper-1",
+        mark_mode_id="mark-1",
+        publish_id="publish-1",
+        record_id="record-1",
+        save_dir=str(tmp_path),
+    )
+    second = task_grade.get_student_grading_bundle(
+        group_id="group-1",
+        paper_id="paper-1",
+        mark_mode_id="mark-1",
+        publish_id="publish-1",
+        record_id="record-1",
+        save_dir=str(tmp_path),
+    )
+
+    first_question = first["data"]["questions"][0]
+    second_question = second["data"]["questions"][0]
+    first_attachment = first_question["attachments"][0]
+    assert first["success"]
+    assert second["success"]
+    assert len(calls) == 1
+    assert first["data"] == {
+        "grading_context": {
+            "group_id": "group-1",
+            "publish_id": "publish-1",
+            "mark_mode_id": "mark-1",
+            "record_id": "record-1",
+            "mark_paper_record_id": "mpr-1",
+        },
+        "questions": [
+            {
+                "question_id": "question-1",
+                "answer_id": "answer-1",
+                "type": "附件题",
+                "max_score": 10,
+                "title": "上传实验截图",
+                "description": "按截图完整性评分",
+                "attachments": [
+                    {
+                        "name": "截图.png",
+                        "mimetype": "image/png",
+                        "file_path": str(tmp_path / "quote-1.png"),
+                    }
+                ],
+            }
+        ],
+    }
+    assert second_question["question_id"] == "question-1"
+    assert Path(first_attachment["file_path"]).read_bytes() == b"\x89PNG\r\nbundle"
+    assert set(first_attachment) == {"name", "mimetype", "file_path"}
+    assert "question_count" not in first["data"]
+    assert "attachment_dir" not in first["data"]
+    assert "quote_id" not in first_attachment
+    assert "size" not in first_attachment
+    assert "from_cache" not in first_attachment
+
+
+def test_grade_student_question_returns_slim_result(monkeypatch):
+    captured = {}
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        captured["payload"] = payload
+        return {"success": True, "data": {"official": "noise"}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.grade_student_question(
+        group_id="group-1",
+        publish_id="publish-1",
+        mark_paper_record_id="mark-paper-1",
+        record_id="record-1",
+        question_id="question-1",
+        answer_id="answer-1",
+        score=9,
+        comment="清楚",
+    )
+
+    assert result["success"]
+    assert result["data"] == {
+        "question_id": "question-1",
+        "answer_id": "answer-1",
+        "score": 9,
+    }
+    assert "official" not in result["data"]
+    assert captured["payload"]["check_description"] == "清楚"
+
+
+def test_submit_student_mark_returns_slim_result(monkeypatch):
+    monkeypatch.setattr(
+        task_grade,
+        "post_json",
+        lambda *args, **kwargs: {"success": True, "data": {"official": "noise"}},
+    )
+
+    result = task_grade.submit_student_mark(
+        group_id="group-1",
+        answer_record_id="record-1",
+        mark_mode_id="mark-mode-1",
+        mark_paper_record_id="mark-paper-1",
+    )
+
+    assert result["success"]
+    assert result["data"] == {"submitted": True}
 
 
 def test_withdraw_student_mark_uses_normal_reset_by_default(monkeypatch):
@@ -369,6 +588,7 @@ def test_withdraw_student_mark_uses_normal_reset_by_default(monkeypatch):
     )
 
     assert result["success"]
+    assert result["data"] == {"reopened": True}
     assert captured["url"].endswith("/survey/course/normal/mark/reset")
     assert captured["payload"] == {
         "group_id": "group-1",
@@ -424,6 +644,7 @@ def test_revise_student_mark_reopens_grades_and_submits_in_order(monkeypatch):
     )
 
     assert result["success"]
+    assert result["data"] == {"graded_count": 1, "reopened": True, "submitted": True}
     assert [url.rsplit("/", 1)[-1] for url, _ in calls] == [
         "reset",
         "checkStuAnswer",
@@ -455,4 +676,86 @@ def test_revise_student_mark_does_not_reopen_by_default(monkeypatch):
     )
 
     assert result["success"]
+    assert result["data"] == {"graded_count": 1, "reopened": False, "submitted": False}
     assert [url.rsplit("/", 1)[-1] for url, _ in calls] == ["checkStuAnswer"]
+
+
+def test_grade_student_paper_grades_all_questions_and_submits(monkeypatch):
+    calls = []
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        calls.append((url, payload))
+        return {"success": True, "data": {"ok": True, "index": len(calls)}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.grade_student_paper(
+        grading_context={
+            "group_id": "group-1",
+            "publish_id": "publish-1",
+            "mark_paper_record_id": "mark-paper-1",
+            "record_id": "record-1",
+            "mark_mode_id": "mark-mode-1",
+        },
+        grades=[
+            {
+                "question_id": "question-1",
+                "answer_id": "answer-1",
+                "score": 10,
+                "comment": "完整",
+            },
+            {
+                "question_id": "question-2",
+                "answer_id": "answer-2",
+                "score": 8,
+                "comment": "步骤略少",
+            },
+        ],
+        submit_after=True,
+    )
+
+    assert result["success"]
+    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == [
+        "checkStuAnswer",
+        "checkStuAnswer",
+        "submitMark",
+    ]
+    assert result["data"] == {"graded_count": 2, "submitted": True}
+    assert calls[0][1]["check_score"] == 10
+    assert calls[1][1]["check_description"] == "步骤略少"
+
+
+def test_grade_student_paper_stops_before_submit_when_a_grade_fails(monkeypatch):
+    calls = []
+
+    def fake_post(url, *, payload=None, timeout=20, allow_http_error=False):
+        calls.append((url, payload))
+        if len(calls) == 2:
+            return {"success": False, "msg": "打分失败"}
+        return {"success": True, "data": {"ok": True}}
+
+    monkeypatch.setattr(task_grade, "post_json", fake_post)
+
+    result = task_grade.grade_student_paper(
+        grading_context={
+            "group_id": "group-1",
+            "publish_id": "publish-1",
+            "mark_paper_record_id": "mark-paper-1",
+            "record_id": "record-1",
+            "mark_mode_id": "mark-mode-1",
+        },
+        grades=[
+            {"question_id": "question-1", "answer_id": "answer-1", "score": 10},
+            {"question_id": "question-2", "answer_id": "answer-2", "score": 8},
+        ],
+        submit_after=True,
+    )
+
+    assert not result["success"]
+    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == [
+        "checkStuAnswer",
+        "checkStuAnswer",
+    ]
+    assert result["data"]["failed_index"] == 1
+    assert result["data"]["graded_count"] == 1
+    assert "grade_results" not in result["data"]

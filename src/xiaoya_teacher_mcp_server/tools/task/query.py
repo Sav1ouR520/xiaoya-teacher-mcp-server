@@ -150,6 +150,20 @@ def _extract_attachments(answer_raw: Any) -> list[dict[str, Any]]:
         return []
 
 
+def _build_question_grading_state(
+    *,
+    has_answer: bool,
+    mark_answer: dict[str, Any] | None,
+) -> str:
+    if not has_answer:
+        return "no_answer"
+    if not mark_answer:
+        return "ungraded"
+    if mark_answer.get("check_score") is None and not mark_answer.get("check_description"):
+        return "ungraded"
+    return "graded"
+
+
 def _build_preview_question(
     question: dict[str, Any],
     answer: dict[str, Any],
@@ -189,6 +203,14 @@ def _build_preview_question(
             question_data["options"] = parse_answer_items(
                 question["answer_items"], question_type, parse_mode
             )
+        question_data["check_description"] = (
+            mark_answer.get("check_description") if mark_answer else None
+        )
+        question_data["check_status"] = mark_answer.get("check_status") if mark_answer else None
+        question_data["grading_state"] = _build_question_grading_state(
+            has_answer=question_data["has_answer"],
+            mark_answer=mark_answer,
+        )
         if question_type == QuestionType.CODE.value:
             question_data["program_setting"] = question.get("program_setting")
             raw_info = render_rich_text_output(answer.get("info"), "raw")

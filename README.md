@@ -1,11 +1,11 @@
 # 小雅教育管理MCP服务器
 
-![版本](https://img.shields.io/badge/版本-1.4.0-blue)
+![版本](https://img.shields.io/badge/版本-1.5.0-blue)
 ![Python](https://img.shields.io/badge/Python-3.11+-green)
 ![MCP](https://img.shields.io/badge/MCP-1.26.0+-purple)
 ![许可证](https://img.shields.io/badge/许可证-MIT-yellow)
 
-专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、题目创建、试卷配置、班级查询、签到统计、任务测验与批阅等能力。
+专为教师设计的小雅智能教学平台教育管理 MCP 服务器。通过 MCP 与 AI 助手集成，提供课程资源管理、Markdown 富文本题目创建、试卷配置、班级查询、签到统计、任务测验与学生答卷批阅等能力。
 
 默认安装包含常用文档转换依赖，适合本地 editable、`uv tool` 和标准发布包。
 
@@ -38,7 +38,7 @@
 - **任务查询** - 查询课程组已发布任务列表、任务详情
 - **成绩管理** - 学生答题情况统计、成绩分析
 - **答题分析** - 学生答题详情预览、题目解析
-- **AI 批阅** - 逐题打分、批注、提交批改，支持附件答案（图片/PDF/文件）查看；已提交批阅可确认后重开修改
+- **AI 批阅** - 按学生打包整张答卷和附件，本地缓存图片/PDF/文件，支持多题分数与评语一次写入并提交；已提交批阅可确认后重开修改
 
 ## 🚀 快速开始
 
@@ -230,10 +230,13 @@ Authorization: Bearer your_bearer_token
 #### 批阅/成绩
 
 - 先用 `query_group_tasks` 选择已发布任务，再调用 `query_test_result` 获取提交人数、未提交人数、平均分和学生答题记录。
-- 查看单个学生答卷使用 `query_preview_student_paper`；需要完整答案内容时设置 `detail_level=full`。
-- 主观题评分流程为 `grade_student_question` 逐题打分，最后用 `submit_student_mark` 提交整卷批阅。选择题、判断题、自动评分填空题一般沿用系统判分。
+- AI 批阅单个学生时优先使用 `get_student_grading_bundle`，可传 `save_dir` 指定附件保存目录；不传则使用当前系统临时目录。
+- `get_student_grading_bundle` 只返回 `grading_context` 和需人工批阅的简答题/附件题；自动评分题、空字段、`quote_id`、文件大小和缓存命中信息不会返回。
+- AI 判断完分数后使用 `grade_student_paper(grading_context=..., grades=[...])` 一次传入多道主观题/附件题的分数和评语，默认会提交整卷批阅。
+- 批阅包核心格式为 `{"grading_context": {...}, "questions": [{"question_id": "...", "answer_id": "...", "max_score": 10, "title": "...", "student_answer": "...", "attachments": [{"name": "...", "mimetype": "image/png", "file_path": "/tmp/..."}]}]}`；打分只需传 `grades=[{"question_id": "...", "answer_id": "...", "score": 10, "comment": "..."}]`。
+- 低层单题修正时仍可用 `query_preview_student_paper(detail_level=full)`、`get_answer_file`、`grade_student_question` 和 `submit_student_mark` 逐步执行。
 - 已提交批阅如需修改，先用 `withdraw_student_mark` 重开，或在明确确认后用 `revise_student_mark(..., allow_reopen=true, submit_after=true)` 重开、改单题并重新提交。
-- 附件答案可用 `get_answer_file` 获取 base64 内容；图片/PDF/小文件更适合直接读取，视频或大文件建议谨慎调用，避免返回过大的内容。
+- 附件答案可用 `get_answer_file` 单独获取；图片/PDF 批阅推荐落盘读取或走 `get_student_grading_bundle`，避免 base64 撑爆上下文。
 
 #### 编程题
 
@@ -299,7 +302,8 @@ xiaoya-teacher-mcp-server/
 
 #### 📋 任务管理模块
 - **query.py** - 默认返回任务和答题摘要, 按需返回完整答卷明细
-- **grade.py** - 逐题打分、提交批改、重开已提交批阅、附件答案文件获取
+- **grade.py** - 学生整卷批改包、批量打分提交、逐题打分、提交批改、重开已提交批阅
+- **attachments.py** - 答卷附件收集、并行下载和本地缓存
 
 ## 🔧 技术栈
 

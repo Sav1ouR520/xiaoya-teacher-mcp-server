@@ -85,12 +85,15 @@ Use this chain exactly:
 
 1. `query_group_tasks(group_id)` to choose a published task and get `paper_id` + `publish_id`.
 2. `query_test_result(group_id, paper_id, publish_id, detail_level="full")` to get `mark_mode_id` and each student's `record_id`.
-3. For manual grading or answer inspection, call `query_preview_student_paper(group_id, paper_id, mark_mode_id, publish_id, record_id, detail_level="full", parse_mode="plain")`. Use `parse_mode="markdown"` only when the answer content will be edited or reused as Markdown.
-4. Read `mark_paper_record_id` from the preview result. For each manually graded question, read `question_id`, `answer_id`, maximum `score`, and current answer content.
-5. For attachment questions, read `attachments[].quote_id` from the matching full-preview question. Do not use `answer_id`, `question_id`, or `record_id` as `quote_id`.
-6. Call `get_answer_file(quote_id, save_path=...)` for images/PDFs/large files so the file lands on disk. Use base64 mode only for small text extraction.
-7. After teacher confirms suggested scores/comments, call `grade_student_question(group_id, publish_id, mark_paper_record_id, record_id, question_id, answer_id, score, comment)`.
-8. After all manual questions for that student are graded, call `submit_student_mark(group_id, answer_record_id=record_id, mark_mode_id, mark_paper_record_id)`.
+3. For agent-assisted grading, call `get_student_grading_bundle(group_id, paper_id, mark_mode_id, publish_id, record_id, save_dir=optional)`. It returns only `grading_context` and manually graded short-answer/attachment questions; auto-scored questions, empty fields, `quote_id`, file size, and cache state are omitted.
+4. Review the answer text and local attachment `file_path` values.
+5. After teacher confirms suggested scores/comments, call `grade_student_paper(grading_context=bundle.data.grading_context, grades=[...])`.
+
+Low-level fallback:
+
+- For a single-question correction, call `query_preview_student_paper(group_id, paper_id, mark_mode_id, publish_id, record_id, detail_level="full", parse_mode="plain")`. Use `parse_mode="markdown"` only when the answer content will be edited or reused as Markdown.
+- For attachment questions, call `get_answer_file(quote_id, save_path=...)` only when the bundle did not already provide a usable `file_path`. Use base64 mode only for small text extraction.
+- To grade one question manually, call `grade_student_question(...)`, then `submit_student_mark(...)` after all required manual questions are graded.
 
 Automatically scored choice/true-false/fill-blank/code questions usually do not need `grade_student_question`.
 

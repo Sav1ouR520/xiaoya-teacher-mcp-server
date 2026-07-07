@@ -1,6 +1,6 @@
 ---
 name: xiaoya-teacher-skill
-description: Use when the user explicitly needs to query, create, update, grade, or troubleshoot content inside 小雅教学平台 or xiaoya-teacher-mcp-server, including XiaoYa courses, resources, papers, questions, published tasks, student submissions, attendance, sign-in records, or MCP setup.
+description: Use when the user explicitly needs to query, create, update, grade, or troubleshoot content inside 小雅教学平台 or xiaoya-teacher-mcp-server, including XiaoYa courses, resources, papers, Markdown-rich questions, published tasks, student grading bundles, submissions, attendance, sign-in records, or MCP setup.
 ---
 
 # 小雅教学助手
