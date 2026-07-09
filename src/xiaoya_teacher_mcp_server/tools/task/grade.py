@@ -9,16 +9,18 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
+import requests
 from pydantic import Field
 
 from ... import field_descriptions as desc
-from ...config import DOWNLOAD_URL, MAIN_URL, MCP
-from ...utils.client import APIRequestError, expect_success, post_json, request_response
+from ...config import DOWNLOAD_URL, HEADERS, MAIN_URL, MCP
+from ...utils.client import APIRequestError, expect_success, get_json, post_json
 from ...utils.response import ResponseUtil
 from .attachments import (
     collect_answer_attachments,
     default_attachment_dir,
     download_answer_attachments,
+    looks_like_html_payload,
     merge_downloaded_attachments,
 )
 from .query import query_preview_student_paper
@@ -520,6 +522,35 @@ def grade_student_paper(
     )
 
 
+def _get_quote_download_url(quote_id: str) -> str:
+    try:
+        meta = expect_success(get_json(f"{DOWNLOAD_URL}/cloud/file_down/{quote_id}/v2"))
+        download_url = str(meta.get("download_url") or "").strip()
+        if not download_url:
+            raise APIRequestError("附件下载链接为空")
+        return download_url
+    except APIRequestError as exc:
+        raise APIRequestError(f"获取附件下载链接失败 (quote_id: {quote_id}): {exc}") from exc
+
+
+def _fetch_quote_file_response(quote_id: str) -> requests.Response:
+    try:
+        response = requests.get(
+            _get_quote_download_url(quote_id),
+            headers={"User-Agent": HEADERS["User-Agent"]},
+            timeout=60,
+        )
+        response.raise_for_status()
+        return response
+    except requests.Timeout as exc:
+        raise APIRequestError("HTTP 请求超时") from exc
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else "unknown"
+        raise APIRequestError(f"HTTP 请求失败: {status_code}") from exc
+    except requests.RequestException as exc:
+        raise APIRequestError(f"HTTP 请求失败: {exc.__class__.__name__}") from exc
+
+
 @MCP.tool()
 def get_answer_file(
     quote_id: Annotated[str, Field(description=desc.QUOTE_ID_DESC)],
@@ -541,14 +572,12 @@ def get_answer_file(
       - 传 save_path：落盘后返回 file_path（适合图片批阅，agent 直接 Read 查看）。
     """
     try:
-        resp = request_response(
-            "GET",
-            f"{DOWNLOAD_URL}/cloud/file_access/{quote_id}",
-            timeout=30,
-        )
+        resp = _fetch_quote_file_response(quote_id)
         mimetype = (
             resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
         )
+        if looks_like_html_payload(resp.content, mimetype):
+            raise APIRequestError("附件下载返回了 HTML 预览页，而非真实文件")
 
         if save_path:
             file_path = _resolve_attachment_path(save_path, quote_id, mimetype)

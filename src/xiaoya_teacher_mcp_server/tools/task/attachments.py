@@ -100,12 +100,32 @@ def _collect_cached_attachments(
     }
 
 
+def _content_head_looks_like_html(content: bytes) -> bool:
+    head = content.lstrip()[:64].lower()
+    return head.startswith(b"<!doctype html") or head.startswith(b"<html")
+
+
+def looks_like_html_payload(content: bytes, mimetype: str) -> bool:
+    if mimetype.startswith("text/html"):
+        return True
+    return _content_head_looks_like_html(content)
+
+
+def _looks_like_html_file(file_path: Path) -> bool:
+    try:
+        return _content_head_looks_like_html(file_path.read_bytes()[:64])
+    except OSError:
+        return True
+
+
 def _find_cached_attachment(directory: Path, quote_id: str) -> Path | None:
     safe_quote_id = _safe_path_part(quote_id)
     if not directory.exists():
         return None
     for child in directory.iterdir():
         if child.is_file() and (child.name == safe_quote_id or child.stem == safe_quote_id):
+            if _looks_like_html_file(child):
+                continue
             return child
     return None
 

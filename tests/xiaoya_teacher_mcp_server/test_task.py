@@ -354,16 +354,31 @@ def test_query_preview_student_paper_full_includes_check_comment(monkeypatch):
 
 
 def _stub_response(content: bytes, content_type: str = "image/png") -> SimpleNamespace:
-    return SimpleNamespace(content=content, headers={"content-type": content_type})
+    return SimpleNamespace(
+        content=content,
+        headers={"content-type": content_type},
+        raise_for_status=lambda: None,
+    )
+
+
+def _stub_quote_download(monkeypatch, payload: bytes, *, content_type: str = "image/png"):
+    def fake_get_json(url, **kwargs):
+        quote_id = url.rstrip("/").rsplit("/", 2)[-2]
+        return {
+            "success": True,
+            "data": {"download_url": f"https://oss.example.test/{quote_id}"},
+        }
+
+    def fake_requests_get(url, **kwargs):
+        return _stub_response(payload, content_type)
+
+    monkeypatch.setattr(task_grade, "get_json", fake_get_json)
+    monkeypatch.setattr(task_grade.requests, "get", fake_requests_get)
 
 
 def test_get_answer_file_returns_base64_when_no_save_path(monkeypatch):
     payload = b"\x89PNG\r\n\x1a\nfake"
-    monkeypatch.setattr(
-        task_grade,
-        "request_response",
-        lambda *args, **kwargs: _stub_response(payload),
-    )
+    _stub_quote_download(monkeypatch, payload)
 
     result = task_grade.get_answer_file("quote-1")
 
@@ -376,11 +391,7 @@ def test_get_answer_file_returns_base64_when_no_save_path(monkeypatch):
 
 def test_get_answer_file_writes_to_save_path_file(monkeypatch, tmp_path):
     payload = b"PDF-BYTES"
-    monkeypatch.setattr(
-        task_grade,
-        "request_response",
-        lambda *args, **kwargs: _stub_response(payload, "application/pdf"),
-    )
+    _stub_quote_download(monkeypatch, payload, content_type="application/pdf")
 
     target = tmp_path / "sub" / "answer.pdf"
     result = task_grade.get_answer_file("quote-2", save_path=str(target))
@@ -395,11 +406,7 @@ def test_get_answer_file_writes_to_save_path_file(monkeypatch, tmp_path):
 
 def test_get_answer_file_save_path_directory_auto_names(monkeypatch, tmp_path):
     payload = b"\x89PNG\r\nok"
-    monkeypatch.setattr(
-        task_grade,
-        "request_response",
-        lambda *args, **kwargs: _stub_response(payload, "image/png"),
-    )
+    _stub_quote_download(monkeypatch, payload, content_type="image/png")
 
     result = task_grade.get_answer_file("quote-3", save_path=str(tmp_path))
 
@@ -407,6 +414,16 @@ def test_get_answer_file_save_path_directory_auto_names(monkeypatch, tmp_path):
     expected = tmp_path / "quote-3.png"
     assert result["data"]["file_path"] == str(expected)
     assert expected.read_bytes() == payload
+
+
+def test_get_answer_file_rejects_html_preview_payload(monkeypatch):
+    html = b"<!DOCTYPE html><html><body>preview</body></html>"
+    _stub_quote_download(monkeypatch, html, content_type="text/html; charset=utf-8")
+
+    result = task_grade.get_answer_file("quote-html")
+
+    assert not result["success"]
+    assert "HTML" in result["message"]
 
 
 def test_get_student_grading_bundle_downloads_attachments_once_and_reuses_cache(
@@ -456,12 +473,21 @@ def test_get_student_grading_bundle_downloads_attachments_once_and_reuses_cache(
 
     calls = []
 
-    def fake_request(method, url, **kwargs):
-        calls.append((method, url))
+    def fake_get_json(url, **kwargs):
+        quote_id = url.rstrip("/").rsplit("/", 2)[-2]
+        calls.append(("get_json", url))
+        return {
+            "success": True,
+            "data": {"download_url": f"https://oss.example.test/{quote_id}"},
+        }
+
+    def fake_requests_get(url, **kwargs):
+        calls.append(("requests.get", url))
         return _stub_response(b"\x89PNG\r\nbundle", "image/png")
 
     monkeypatch.setattr(task_grade, "query_preview_student_paper", fake_preview)
-    monkeypatch.setattr(task_grade, "request_response", fake_request)
+    monkeypatch.setattr(task_grade, "get_json", fake_get_json)
+    monkeypatch.setattr(task_grade.requests, "get", fake_requests_get)
 
     first = task_grade.get_student_grading_bundle(
         group_id="group-1",
@@ -485,7 +511,9 @@ def test_get_student_grading_bundle_downloads_attachments_once_and_reuses_cache(
     first_attachment = first_question["attachments"][0]
     assert first["success"]
     assert second["success"]
-    assert len(calls) == 1
+    assert len(calls) == 2
+    assert calls[0][0] == "get_json"
+    assert calls[1][0] == "requests.get"
     assert first["data"] == {
         "grading_context": {
             "group_id": "group-1",
@@ -520,6 +548,70 @@ def test_get_student_grading_bundle_downloads_attachments_once_and_reuses_cache(
     assert "quote_id" not in first_attachment
     assert "size" not in first_attachment
     assert "from_cache" not in first_attachment
+
+
+def test_get_student_grading_bundle_redownloads_when_cached_file_is_html(monkeypatch, tmp_path):
+    (tmp_path / "quote-1.png").write_text(
+        "<!DOCTYPE html><html><body>preview</body></html>",
+        encoding="utf-8",
+    )
+
+    def fake_preview(*args, **kwargs):
+        return {
+            "success": True,
+            "data": {
+                "record_id": "record-1",
+                "mark_paper_record_id": "mpr-1",
+                "questions": [
+                    {
+                        "id": "question-1",
+                        "type": "附件题",
+                        "score": 10,
+                        "title": "上传实验截图",
+                        "answer_id": "answer-1",
+                        "user": {"answer": []},
+                        "attachments": [
+                            {
+                                "name": "截图.png",
+                                "quote_id": "quote-1",
+                                "mimetype": "image/png",
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+
+    calls = []
+
+    def fake_get_json(url, **kwargs):
+        calls.append(url)
+        return {
+            "success": True,
+            "data": {"download_url": "https://oss.example.test/quote-1"},
+        }
+
+    def fake_requests_get(url, **kwargs):
+        calls.append(url)
+        return _stub_response(b"\x89PNG\r\nfresh", "image/png")
+
+    monkeypatch.setattr(task_grade, "query_preview_student_paper", fake_preview)
+    monkeypatch.setattr(task_grade, "get_json", fake_get_json)
+    monkeypatch.setattr(task_grade.requests, "get", fake_requests_get)
+
+    result = task_grade.get_student_grading_bundle(
+        group_id="group-1",
+        paper_id="paper-1",
+        mark_mode_id="mark-1",
+        publish_id="publish-1",
+        record_id="record-1",
+        save_dir=str(tmp_path),
+    )
+
+    assert result["success"]
+    assert len(calls) == 2
+    file_path = Path(result["data"]["questions"][0]["attachments"][0]["file_path"])
+    assert file_path.read_bytes() == b"\x89PNG\r\nfresh"
 
 
 def test_grade_student_question_returns_slim_result(monkeypatch):
