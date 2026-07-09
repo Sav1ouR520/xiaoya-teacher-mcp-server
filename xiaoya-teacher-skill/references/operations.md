@@ -93,6 +93,7 @@ Low-level fallback:
 
 - For a single-question correction, call `query_preview_student_paper(group_id, paper_id, mark_mode_id, publish_id, record_id, detail_level="full", parse_mode="plain")`. Use `parse_mode="markdown"` only when the answer content will be edited or reused as Markdown.
 - For attachment questions, call `get_answer_file(quote_id, save_path=...)` only when the bundle did not already provide a usable `file_path`. Use base64 mode only for small text extraction.
+- `get_answer_file` now fetches real files through `file_down/v2`; if the server returns an HTML preview page instead of binary content, the tool returns a structured error and the caller should retry or switch to bundle-based local cache files.
 - To grade one question manually, call `grade_student_question(...)`, then `submit_student_mark(...)` after all required manual questions are graded.
 
 Automatically scored choice/true-false/fill-blank/code questions usually do not need `grade_student_question`.
